@@ -1,16 +1,17 @@
 """Bronze layer ingestion pipeline."""
 
 import time
+from pathlib import Path
 from typing import Any, Dict
 
 from upstream_home_test.io.api_client import APIError, fetch_vehicle_messages
 from upstream_home_test.io.parquet_writer import ParquetWriteError, write_bronze_parquet
-from upstream_home_test.utils.logging_config import log_pipeline_step, setup_logging
+from upstream_home_test.utils.logging_config import get_project_root, log_pipeline_step, setup_logging
 
 BRONZE_LAYER = 'bronze_ingestion'
 
 
-def run_bronze_ingestion(amount: int = 10000, output_dir: str = "data/bronze") -> Dict[str, Any]:
+def run_bronze_ingestion(amount: int = 10000, output_dir: str | None = None) -> Dict[str, Any]:
     """Run the complete Bronze layer ingestion pipeline.
     
     This pipeline:
@@ -33,6 +34,16 @@ def run_bronze_ingestion(amount: int = 10000, output_dir: str = "data/bronze") -
     """
     # Set up logging
     logger = setup_logging()
+    
+    # Use absolute path for output directory
+    if output_dir is None:
+        project_root = get_project_root()
+        output_dir = str(project_root / "data" / "bronze")
+    else:
+        # Convert relative path to absolute if needed
+        if not Path(output_dir).is_absolute():
+            project_root = get_project_root()
+            output_dir = str(project_root / output_dir)
     
     pipeline_start = time.time()
     
@@ -71,7 +82,7 @@ def run_bronze_ingestion(amount: int = 10000, output_dir: str = "data/bronze") -
             metrics={"messages": len(messages)}
         )
         
-        write_stats = write_bronze_parquet(messages, output_dir)
+        write_stats = write_bronze_parquet(messages, output_dir, logger)
         
         # Calculate total duration
         total_duration_ms = (time.time() - pipeline_start) * 1000
@@ -145,19 +156,29 @@ def main():
     import sys
     
     try:
-        # Parse command line arguments
+        # Default values
         amount = 10000
+        output_dir = "data/bronze"
+
+        # Parse command line arguments
         if len(sys.argv) > 1:
             try:
                 amount = int(sys.argv[1])
                 print(f"Using amount from command line: {amount}")
             except ValueError:
-                print(f"Invalid amount argument: {sys.argv[1]}. Using default: 10000")
+                print(f"Invalid amount argument: {sys.argv[1]}. Using default: {amount}")
         else:
             print(f"No amount specified, using default: {amount}")
+            
+        # Parse output directory if provided as second argument
+        if len(sys.argv) > 2:
+            output_dir = sys.argv[2]
+            print(f"Using output directory from command line: {output_dir}")
+        else:
+            print(f"No output directory specified, using default: {output_dir}")
         
         # Run pipeline
-        result = run_bronze_ingestion(amount)
+        result = run_bronze_ingestion(amount, output_dir)
         
         # Print results
         print(f"Bronze ingestion completed successfully!")

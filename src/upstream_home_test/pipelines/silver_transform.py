@@ -6,14 +6,14 @@ from typing import Any, Dict
 
 import polars as pl
 
-from upstream_home_test.io.parquet_writer import ParquetWriteError, write_silver_parquet
+from upstream_home_test.io.parquet_writer import GenericParquetWriter, ParquetWriteError
 from upstream_home_test.schemas.silver import GEAR_POSITION_MAPPING, map_gear_position
 from upstream_home_test.utils.logging_config import log_pipeline_step, setup_logging
 
 
 def run_silver_transform(
     bronze_dir: str = "data/bronze",
-    output_path: str = "data/silver/vehicle_messages_cleaned.parquet"
+    output_path: str = "data/silver"
 ) -> Dict[str, Any]:
     """Run the complete Silver layer transformation pipeline.
     
@@ -34,8 +34,8 @@ def run_silver_transform(
     Raises:
         ParquetWriteError: If Parquet writing fails
     """
-    # Set up logging
-    logger = setup_logging()
+    # Set up logging (don't clear log file to preserve bronze logs)
+    logger = setup_logging(clear_log_file=False)
     
     pipeline_start = time.time()
     
@@ -97,41 +97,17 @@ def run_silver_transform(
         
         # Apply transformations
         df_cleaned = df_filtered.with_columns([
-            # Clean manufacturer field
-            pl.col("manufacturer").alias("manufacturer_original"),
-            pl.col("manufacturer").str.strip_chars().alias("manufacturer_cleaned"),
+            # Clean manufacturer field in place (remove trailing spaces)
+            pl.col("manufacturer").str.strip_chars().alias("manufacturer"),
             
             # Map gear positions to integers
             pl.col("gearPosition").map_elements(
                 map_gear_position, 
                 return_dtype=pl.Int64
-            ).alias("gear_position"),
-        ]).drop("gearPosition")  # Remove original gearPosition column
+            ).alias("gearPosition"),
+        ])  # Remove original gearPosition column
         
-        # Step 3: Validate sample of cleaned data
-        log_pipeline_step(
-            logger=logger,
-            step="silver_transform",
-            event="Validating cleaned data",
-            metrics={"rows_to_validate": min(100, len(df_cleaned))}
-        )
-        
-        # Sample validation (first 100 rows)
-        sample_size = min(100, len(df_cleaned))
-        if sample_size > 0:
-            sample_df = df_cleaned.head(sample_size)
-            validation_errors = validate_silver_sample(sample_df)
-            
-            if validation_errors:
-                log_pipeline_step(
-                    logger=logger,
-                    step="silver_transform",
-                    event=f"Validation found {len(validation_errors)} errors in sample",
-                    metrics={"validation_errors": validation_errors[:5]},
-                    level="WARNING"
-                )
-        
-        # Step 4: Write to Silver layer
+        # Step 3: Write to Silver layer
         log_pipeline_step(
             logger=logger,
             step="silver_transform",
@@ -139,7 +115,15 @@ def run_silver_transform(
             metrics={"output_rows": len(df_cleaned)}
         )
         
-        write_stats = write_silver_parquet(df_cleaned, output_path)
+        # Create generic parquet writer for Silver layer with partitioning (same as Bronze)
+        writer = GenericParquetWriter(
+            output_dir=output_path,
+            partitioning_enabled=True,
+            compression="zstd",
+            logger=logger
+        )
+        
+        write_stats = writer.write(df_cleaned)
         
         # Calculate total duration
         total_duration_ms = (time.time() - pipeline_start) * 1000
@@ -194,50 +178,6 @@ def run_silver_transform(
         raise RuntimeError(error_msg) from e
 
 
-def validate_silver_sample(df: pl.DataFrame) -> list[str]:
-    """Validate a sample of Silver layer data.
-    
-    Args:
-        df: Polars DataFrame to validate
-        
-    Returns:
-        List of validation error messages
-    """
-    errors = []
-    
-    try:
-        # Check for required columns
-        required_columns = ["vin", "manufacturer_original", "manufacturer_cleaned", "gear_position", "timestamp"]
-        missing_columns = [col for col in required_columns if col not in df.columns]
-        if missing_columns:
-            errors.append(f"Missing required columns: {missing_columns}")
-        
-        # Check VIN is not null
-        null_vin_count = df.filter(pl.col("vin").is_null()).height
-        if null_vin_count > 0:
-            errors.append(f"Found {null_vin_count} rows with null VIN")
-        
-        # Check gear position values
-        invalid_gear_count = df.filter(
-            pl.col("gear_position").is_not_null() & 
-            ~pl.col("gear_position").is_in([0, 1, 2, 3, 4])
-        ).height
-        if invalid_gear_count > 0:
-            errors.append(f"Found {invalid_gear_count} rows with invalid gear positions")
-        
-        # Check manufacturer consistency
-        inconsistent_manufacturer = df.filter(
-            pl.col("manufacturer_original").str.strip_chars() != pl.col("manufacturer_cleaned")
-        ).height
-        if inconsistent_manufacturer > 0:
-            errors.append(f"Found {inconsistent_manufacturer} rows with inconsistent manufacturer fields")
-        
-    except Exception as e:
-        errors.append(f"Validation error: {str(e)}")
-    
-    return errors
-
-
 def main():
     """CLI entry point for Silver transformation."""
     import sys
@@ -245,7 +185,7 @@ def main():
     try:
         # Parse command line arguments
         bronze_dir = "data/bronze"
-        output_path = "data/silver/vehicle_messages_cleaned.parquet"
+        output_path = "data/silver"
         
         if len(sys.argv) > 1:
             bronze_dir = sys.argv[1]

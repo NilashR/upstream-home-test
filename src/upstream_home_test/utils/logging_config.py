@@ -8,6 +8,13 @@ from pathlib import Path
 from typing import Any, Dict
 
 
+def get_project_root() -> Path:
+    """Get the project root directory (where pyproject.toml is located)."""
+    current_file = Path(__file__).resolve()
+    # Go up 4 levels: utils -> upstream_home_test -> src -> project_root
+    return current_file.parent.parent.parent.parent
+
+
 class JSONFormatter(logging.Formatter):
     """Custom JSON formatter for structured logging."""
 
@@ -28,17 +35,19 @@ class JSONFormatter(logging.Formatter):
         return json.dumps(log_entry, ensure_ascii=False)
 
 
-def setup_logging(log_level: str = "INFO") -> logging.Logger:
+def setup_logging(log_level: str = "INFO", clear_log_file: bool = True) -> logging.Logger:
     """Set up structured JSON logging for the pipeline.
     
     Args:
         log_level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        clear_log_file: Whether to clear the existing log file (default: True)
         
     Returns:
         Configured logger instance
     """
-    # Create logs directory if it doesn't exist
-    logs_dir = Path("logs")
+    # Get project root directory (where pyproject.toml is located)
+    project_root = get_project_root()
+    logs_dir = project_root / "logs"
     logs_dir.mkdir(exist_ok=True)
     
     # Configure root logger
@@ -53,8 +62,12 @@ def setup_logging(log_level: str = "INFO") -> logging.Logger:
     console_handler.setFormatter(JSONFormatter())
     logger.addHandler(console_handler)
     
-    # File handler
-    file_handler = logging.FileHandler(logs_dir / "pipeline.log")
+    # File handler - optionally clear log file
+    log_file_path = logs_dir / "pipeline.log"
+    if clear_log_file and log_file_path.exists():
+        log_file_path.unlink()  # Remove existing log file
+    
+    file_handler = logging.FileHandler(log_file_path)
     file_handler.setFormatter(JSONFormatter())
     logger.addHandler(file_handler)
     

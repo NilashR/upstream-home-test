@@ -1,6 +1,7 @@
 """Pydantic schemas for Silver layer (cleaned and standardized data)."""
 
 from datetime import datetime
+from enum import IntEnum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
@@ -34,24 +35,26 @@ class VehicleMessageCleaned(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
     altitude: float | None = None
-    
-    @field_validator("gear_position")
-    @classmethod
-    def validate_gear_position(cls, v: int | None) -> int | None:
-        """Validate gear position is a valid integer.
-        
-        Args:
-            v: Gear position integer or None
-            
-        Returns:
-            Gear position integer or None
-            
-        Raises:
-            ValueError: If gear position is invalid
-        """
-        if v is not None and v not in {0, 1, 2, 3, 4}:
-            raise ValueError(f"Gear position must be 0-4, got {v}")
-        return v
+
+    #TODO: consider return the validation, no need here because the function hanfle by enum only
+
+    # @field_validator("gear_position")
+    # @classmethod
+    # def validate_gear_position(cls, v: int | None) -> int | None:
+    #     """Validate gear position is a valid integer.
+    #
+    #     Args:
+    #         v: Gear position integer or None
+    #
+    #     Returns:
+    #         Gear position integer or None
+    #
+    #     Raises:
+    #         ValueError: If gear position is invalid
+    #     """
+    #     if v is not None and v not in {-1, 0, 1, 2, 3, 4, 5, 6}:
+    #         raise ValueError(f"Gear position must be -1 to 6, got {v}")
+    #     return v
     
     @field_validator("vin")
     @classmethod
@@ -160,27 +163,77 @@ class VehicleMessageCleaned(BaseModel):
         return self
 
 
+# Gear position enum with all available options
+class GearPosition(IntEnum):
+    """Standardized gear position enum with all available options."""
+    UNKNOWN = -1
+    PARK = 0
+    REVERSE = 1
+    NEUTRAL = 2
+    DRIVE = 3
+    LOW = 4
+    GEAR_5 = 5
+    GEAR_6 = 6
+
+
 # Gear position mapping constants
 GEAR_POSITION_MAPPING = {
-    "P": 0,  # Park
-    "R": 1,  # Reverse
-    "N": 2,  # Neutral
-    "D": 3,  # Drive
-    "L": 4,  # Low
+    # Standard gear positions
+    "P": GearPosition.PARK,  # Park
+    "R": GearPosition.REVERSE,  # Reverse
+    "N": GearPosition.NEUTRAL,  # Neutral
+    "D": GearPosition.DRIVE,  # Drive
+    "L": GearPosition.LOW,  # Low
+    
+    # Numeric gear positions
+    "-1": GearPosition.UNKNOWN,
+    "0": GearPosition.PARK,
+    "1": GearPosition.REVERSE,
+    "2": GearPosition.NEUTRAL,  # Using 5 for gear 2
+    "3": GearPosition.DRIVE,  # Using 6 for gear 3
+    "4": GearPosition.LOW,  # Using 3 for gear 4 (Drive)
+    "5": GearPosition.GEAR_5,
+    "6": GearPosition.GEAR_6,
+    
+    # String representations
+    "PARK": GearPosition.PARK,
+    "REVERSE": GearPosition.REVERSE,
+    "NEUTRAL": GearPosition.NEUTRAL,
+    "DRIVE": GearPosition.DRIVE,
+    "LOW": GearPosition.LOW,
+    
+    # Special cases
+    "": GearPosition.UNKNOWN,
+    "UNKNOWN": GearPosition.UNKNOWN,
+    "NULL": GearPosition.UNKNOWN,
 }
 
 
 def map_gear_position(gear_str: str | None) -> int | None:
-    """Map gear position string to integer.
+    """Map gear position string to standardized integer.
     
     Args:
-        gear_str: Gear position string (P, R, N, D, L) or None
+        gear_str: Gear position string or None
         
     Returns:
-        Mapped integer (0-4) or None if invalid/None
+        Mapped integer (-1, 0-6) or None if invalid/None
+        -1: Unknown/Invalid
+        0: Park
+        1: Reverse  
+        2: Neutral
+        3: Drive
+        4: Low
+        5: Gear 2/5
+        6: Gear 3/6
     """
     if gear_str is None:
         return None
     
     gear_str = gear_str.strip().upper()
-    return GEAR_POSITION_MAPPING.get(gear_str)
+    mapped_value = GEAR_POSITION_MAPPING.get(gear_str)
+    
+    if mapped_value is not None:
+        return mapped_value.value
+    
+    # If not found in mapping, return unknown
+    return GearPosition.UNKNOWN.value
