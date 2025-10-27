@@ -78,3 +78,4 @@ print("2. Run: quick_debug(df, '1C4NJDBB0GD610265')")
 print("\nOr if you have the data loaded, uncomment the lines below:")
 print("# quick_debug(df, '1C4NJDBB0GD610265')")
 
+
