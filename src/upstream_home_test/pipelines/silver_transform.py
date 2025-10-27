@@ -238,7 +238,7 @@ def validate_silver_sample(df: pl.DataFrame) -> list[str]:
     return errors
 
 
-if __name__ == "__main__":
+def main():
     """CLI entry point for Silver transformation."""
     import sys
     
@@ -249,8 +249,10 @@ if __name__ == "__main__":
         
         if len(sys.argv) > 1:
             bronze_dir = sys.argv[1]
+            print(f"Using bronze directory: {bronze_dir}")
         if len(sys.argv) > 2:
             output_path = sys.argv[2]
+            print(f"Using output path: {output_path}")
         
         # Run pipeline
         result = run_silver_transform(bronze_dir, output_path)
@@ -265,3 +267,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"Silver transformation failed: {str(e)}")
         sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

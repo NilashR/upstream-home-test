@@ -36,20 +36,41 @@ A high-performance data pipeline implementing the medallion architecture (Bronze
 
 ## Usage
 
-### Bronze Layer (Raw Data Ingestion)
+### 🥉 Bronze Layer (Raw Data Ingestion)
 ```bash
 # Fetch 10K messages from API and store as partitioned Parquet files
 poetry run bronze-ingest [amount]
 
-# Example: Fetch 1000 messages
-poetry run bronze-ingest 1000
+# Examples:
+poetry run bronze-ingest          # 10,000 messages (default)
+poetry run bronze-ingest 1000     # 1,000 messages
+poetry run bronze-ingest 50000    # 50,000 messages
 ```
 
-### Silver Layer (Data Transformation)
+### 🥈 Silver Layer (Data Transformation)
 ```bash
 # Transform Bronze data: clean manufacturer, filter nulls, map gear positions
-poetry run silver-transform
+poetry run silver-transform [bronze_dir] [output_path]
+
+# Examples:
+poetry run silver-transform                                    # Use defaults
+poetry run silver-transform data/bronze                        # Custom bronze dir
+poetry run silver-transform data/bronze data/silver/cleaned.parquet  # Custom paths
 ```
+
+### 🏗️ Complete Pipeline
+```bash
+# Run Bronze → Silver pipeline in sequence
+poetry run run-pipeline [amount] [bronze_dir] [output_path]
+
+# Examples:
+poetry run run-pipeline          # 10,000 messages with defaults
+poetry run run-pipeline 5000     # 5,000 messages
+poetry run run-pipeline 10000 data/bronze data/silver/  # Custom paths
+```
+
+### 📁 Scripts Directory
+For more detailed usage and direct script execution, see [`scripts/README.md`](scripts/README.md).
 
 ### Development Commands
 - Run tests: `poetry run pytest`

@@ -25,8 +25,9 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
-bronze-ingest = "upstream_home_test.pipelines.bronze_ingestion:run_bronze_ingestion"
-silver-transform = "upstream_home_test.pipelines.silver_transform:run_silver_transform"
+bronze-ingest = "scripts.bronze_ingest:main"
+silver-transform = "scripts.silver_transform:main"
+run-pipeline = "scripts.run_pipeline:main"
 
 [tool.ruff]
 target-version = "py312"

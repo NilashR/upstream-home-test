@@ -7,6 +7,8 @@ from upstream_home_test.io.api_client import APIError, fetch_vehicle_messages
 from upstream_home_test.io.parquet_writer import ParquetWriteError, write_bronze_parquet
 from upstream_home_test.utils.logging_config import log_pipeline_step, setup_logging
 
+BRONZE_LAYER = 'bronze_ingestion'
+
 
 def run_bronze_ingestion(amount: int = 10000, output_dir: str = "data/bronze") -> Dict[str, Any]:
     """Run the complete Bronze layer ingestion pipeline.
@@ -38,7 +40,7 @@ def run_bronze_ingestion(amount: int = 10000, output_dir: str = "data/bronze") -
         # Step 1: Fetch messages from API
         log_pipeline_step(
             logger=logger,
-            step="bronze_ingestion",
+            step=BRONZE_LAYER,
             event="Starting Bronze layer ingestion",
             metrics={"amount": amount, "output_dir": output_dir}
         )
@@ -48,7 +50,7 @@ def run_bronze_ingestion(amount: int = 10000, output_dir: str = "data/bronze") -
         if not messages:
             log_pipeline_step(
                 logger=logger,
-                step="bronze_ingestion",
+                step=BRONZE_LAYER,
                 event="No messages received from API",
                 metrics={"amount_requested": amount, "amount_received": 0},
                 level="WARNING"
@@ -64,7 +66,7 @@ def run_bronze_ingestion(amount: int = 10000, output_dir: str = "data/bronze") -
         # Step 2: Write to Bronze layer
         log_pipeline_step(
             logger=logger,
-            step="bronze_ingestion",
+            step=BRONZE_LAYER,
             event="Writing messages to Bronze layer",
             metrics={"messages": len(messages)}
         )
@@ -77,7 +79,7 @@ def run_bronze_ingestion(amount: int = 10000, output_dir: str = "data/bronze") -
         # Log completion
         log_pipeline_step(
             logger=logger,
-            step="bronze_ingestion",
+            step=BRONZE_LAYER,
             event="Bronze layer ingestion completed successfully",
             metrics={
                 "messages_fetched": len(messages),
@@ -101,7 +103,7 @@ def run_bronze_ingestion(amount: int = 10000, output_dir: str = "data/bronze") -
         
         log_pipeline_step(
             logger=logger,
-            step="bronze_ingestion",
+            step=BRONZE_LAYER,
             event=error_msg,
             metrics={"error": str(e), "duration_ms": round(duration_ms, 2)},
             level="ERROR"
@@ -115,7 +117,7 @@ def run_bronze_ingestion(amount: int = 10000, output_dir: str = "data/bronze") -
         
         log_pipeline_step(
             logger=logger,
-            step="bronze_ingestion",
+            step=BRONZE_LAYER,
             event=error_msg,
             metrics={"error": str(e), "duration_ms": round(duration_ms, 2)},
             level="ERROR"
@@ -129,7 +131,7 @@ def run_bronze_ingestion(amount: int = 10000, output_dir: str = "data/bronze") -
         
         log_pipeline_step(
             logger=logger,
-            step="bronze_ingestion",
+            step=BRONZE_LAYER,
             event=error_msg,
             metrics={"error": str(e), "duration_ms": round(duration_ms, 2)},
             level="ERROR"
@@ -138,7 +140,7 @@ def run_bronze_ingestion(amount: int = 10000, output_dir: str = "data/bronze") -
         raise RuntimeError(error_msg) from e
 
 
-if __name__ == "__main__":
+def main():
     """CLI entry point for Bronze ingestion."""
     import sys
     
@@ -148,8 +150,11 @@ if __name__ == "__main__":
         if len(sys.argv) > 1:
             try:
                 amount = int(sys.argv[1])
+                print(f"Using amount from command line: {amount}")
             except ValueError:
                 print(f"Invalid amount argument: {sys.argv[1]}. Using default: 10000")
+        else:
+            print(f"No amount specified, using default: {amount}")
         
         # Run pipeline
         result = run_bronze_ingestion(amount)
@@ -164,3 +169,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"Bronze ingestion failed: {str(e)}")
         sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
