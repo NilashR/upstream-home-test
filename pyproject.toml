@@ -8,6 +8,11 @@ packages = [{include = "upstream_home_test", from = "src"}]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.13"
+polars = "^1.34.0"
+pyarrow = "^14.0.0"
+pydantic = "^2.5.0"
+httpx = "^0.26.0"
+numpy = "<2.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"
@@ -20,8 +25,8 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
-# Add any command-line scripts here
-# example = "upstream_home_test.cli:main"
+bronze-ingest = "upstream_home_test.pipelines.bronze_ingestion:run_bronze_ingestion"
+silver-transform = "upstream_home_test.pipelines.silver_transform:run_silver_transform"
 
 [tool.ruff]
 target-version = "py312"
