@@ -6,7 +6,7 @@ from typing import Any
 import httpx
 from httpx import HTTPError, TimeoutException
 
-from ..utils.logging_config import log_pipeline_step
+from upstream_home_test.utils.logging_config import log_pipeline_step
 
 
 class APIError(Exception):

@@ -7,9 +7,9 @@ from typing import Any, Dict, List
 import polars as pl
 from pydantic import ValidationError
 
-from ..schemas.bronze import VehicleMessageRaw
-from ..utils.logging_config import log_pipeline_step
-from ..utils.partitioning import create_partition_filename, create_partition_path, split_by_size
+from upstream_home_test.schemas.bronze import VehicleMessageRaw
+from upstream_home_test.utils.logging_config import log_pipeline_step
+from upstream_home_test.utils.partitioning import create_partition_filename, create_partition_path, split_by_size
 
 
 class ParquetWriteError(Exception):
@@ -86,7 +86,7 @@ def write_bronze_parquet(
         df = pl.DataFrame(message_dicts)
         
         # Partition by date and hour
-        from ..utils.partitioning import partition_by_datetime
+        from upstream_home_test.utils.partitioning import partition_by_datetime
         partitions = partition_by_datetime(message_dicts)
         
         files_written = 0

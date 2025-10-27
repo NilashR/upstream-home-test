@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any, Dict, List, Tuple
 
-from ..utils.logging_config import log_pipeline_step
+from upstream_home_test.utils.logging_config import log_pipeline_step
 
 
 def partition_by_datetime(messages: List[Dict[str, Any]]) -> Dict[Tuple[str, str], List[Dict[str, Any]]]:

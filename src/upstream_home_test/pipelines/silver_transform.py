@@ -6,9 +6,9 @@ from typing import Any, Dict
 
 import polars as pl
 
-from ..io.parquet_writer import ParquetWriteError, write_silver_parquet
-from ..schemas.silver import GEAR_POSITION_MAPPING, map_gear_position
-from ..utils.logging_config import log_pipeline_step, setup_logging
+from upstream_home_test.io.parquet_writer import ParquetWriteError, write_silver_parquet
+from upstream_home_test.schemas.silver import GEAR_POSITION_MAPPING, map_gear_position
+from upstream_home_test.utils.logging_config import log_pipeline_step, setup_logging
 
 
 def run_silver_transform(

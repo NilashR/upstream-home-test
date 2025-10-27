@@ -3,9 +3,9 @@
 import time
 from typing import Any, Dict
 
-from ..io.api_client import APIError, fetch_vehicle_messages
-from ..io.parquet_writer import ParquetWriteError, write_bronze_parquet
-from ..utils.logging_config import log_pipeline_step, setup_logging
+from upstream_home_test.io.api_client import APIError, fetch_vehicle_messages
+from upstream_home_test.io.parquet_writer import ParquetWriteError, write_bronze_parquet
+from upstream_home_test.utils.logging_config import log_pipeline_step, setup_logging
 
 
 def run_bronze_ingestion(amount: int = 10000, output_dir: str = "data/bronze") -> Dict[str, Any]:
