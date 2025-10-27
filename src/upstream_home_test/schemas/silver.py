@@ -35,26 +35,24 @@ class VehicleMessageCleaned(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
     altitude: float | None = None
-
-    #TODO: consider return the validation, no need here because the function hanfle by enum only
-
-    # @field_validator("gear_position")
-    # @classmethod
-    # def validate_gear_position(cls, v: int | None) -> int | None:
-    #     """Validate gear position is a valid integer.
-    #
-    #     Args:
-    #         v: Gear position integer or None
-    #
-    #     Returns:
-    #         Gear position integer or None
-    #
-    #     Raises:
-    #         ValueError: If gear position is invalid
-    #     """
-    #     if v is not None and v not in {-1, 0, 1, 2, 3, 4, 5, 6}:
-    #         raise ValueError(f"Gear position must be -1 to 6, got {v}")
-    #     return v
+    
+    @field_validator("gear_position")
+    @classmethod
+    def validate_gear_position(cls, v: int | None) -> int | None:
+        """Validate gear position is a valid integer.
+        
+        Args:
+            v: Gear position integer or None
+            
+        Returns:
+            Gear position integer or None
+            
+        Raises:
+            ValueError: If gear position is invalid
+        """
+        if v is not None and v not in {-1, 0, 1, 2, 3, 4, 5, 6}:
+            raise ValueError(f"Gear position must be -1 to 6, got {v}")
+        return v
     
     @field_validator("vin")
     @classmethod
@@ -179,19 +177,19 @@ class GearPosition(IntEnum):
 # Gear position mapping constants
 GEAR_POSITION_MAPPING = {
     # Standard gear positions
-    "P": GearPosition.PARK,  # Park
-    "R": GearPosition.REVERSE,  # Reverse
-    "N": GearPosition.NEUTRAL,  # Neutral
-    "D": GearPosition.DRIVE,  # Drive
-    "L": GearPosition.LOW,  # Low
+    "P": GearPosition.PARK,
+    "R": GearPosition.REVERSE,
+    "N": GearPosition.NEUTRAL,
+    "D": GearPosition.DRIVE,
+    "L": GearPosition.LOW,
     
     # Numeric gear positions
     "-1": GearPosition.UNKNOWN,
     "0": GearPosition.PARK,
     "1": GearPosition.REVERSE,
-    "2": GearPosition.NEUTRAL,  # Using 5 for gear 2
-    "3": GearPosition.DRIVE,  # Using 6 for gear 3
-    "4": GearPosition.LOW,  # Using 3 for gear 4 (Drive)
+    "2": GearPosition.NEUTRAL,
+    "3": GearPosition.DRIVE,
+    "4": GearPosition.LOW,
     "5": GearPosition.GEAR_5,
     "6": GearPosition.GEAR_6,
     

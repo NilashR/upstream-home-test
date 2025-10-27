@@ -105,7 +105,10 @@ def run_silver_transform(
                 map_gear_position, 
                 return_dtype=pl.Int64
             ).alias("gearPosition"),
-        ])  # Remove original gearPosition column
+            
+            # Ensure timestamp is in UTC timezone
+            pl.col("timestamp").dt.replace_time_zone("UTC").alias("timestamp"),
+        ])
         
         # Step 3: Write to Silver layer
         log_pipeline_step(

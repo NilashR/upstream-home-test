@@ -157,7 +157,7 @@ def main():
     
     try:
         # Default values
-        amount = 10000
+        amount = 1000
         output_dir = "data/bronze"
 
         # Parse command line arguments
