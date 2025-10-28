@@ -3,7 +3,8 @@ in the bronze layer data using DuckDB and regex pattern matching.
 """
 import sys
 from pathlib import Path
-from typing import List
+from typing import List, Optional
+import json
 
 import duckdb
 import polars as pl
@@ -19,6 +20,7 @@ class SQLInjectionResult(BaseModel):
         column_name: Name of the column with the violation
         column_value: The actual value that triggered the detection
         matched_pattern: The regex pattern that matched
+        message_json: JSON string of the original violating message
     """
     
     file_path: str
@@ -26,6 +28,7 @@ class SQLInjectionResult(BaseModel):
     column_name: str
     column_value: str
     matched_pattern: str
+    message_json: Optional[str] = None
 
 
 class SQLInjectionReport(BaseModel):
@@ -125,16 +128,38 @@ def sql_injection_report(
                     violation_query = f"""
                     SELECT 
                         ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) - 1 as row_index,
-                        "{column}" as column_value
+                        "{column}" as column_value,
+                        *
                     FROM read_parquet('{file_path_str}')
                     WHERE "{column}" IS NOT NULL 
                     AND regexp_matches("{column}"::VARCHAR, '{escaped_pattern}')
                     """
                     
                     try:
-                        results = conn.execute(violation_query).fetchall()
+                        cur = conn.execute(violation_query)
+                        results = cur.fetchall()
+                        col_names = [d[0] for d in cur.description]
                         
-                        for row_index, column_value in results:
+                        for row in results:
+                            # Map row to dict using column names
+                            row_dict = {name: row[idx] for idx, name in enumerate(col_names)}
+                            row_index = int(row_dict.get("row_index", 0))
+                            column_value = row_dict.get("column_value")
+                            # Remove helper fields from message payload
+                            row_dict.pop("row_index", None)
+                            row_dict.pop("column_value", None)
+                            # Serialize full message to JSON (best-effort via str())
+                            safe_row = {k: (v.isoformat() if hasattr(v, 'isoformat') else str(v)) for k, v in row_dict.items()}
+                            message_json = json.dumps(safe_row, ensure_ascii=False)
+                            violation = SQLInjectionResult(
+                                file_path=file_path_str,
+                                row_index=int(row_index),
+                                column_name=column,
+                                column_value=str(column_value),
+                                matched_pattern=pattern,
+                                message_json=message_json,
+                            )
+                            violations.append(violation)
                             violation = SQLInjectionResult(
                                 file_path=file_path_str,
                                 row_index=int(row_index),
@@ -179,7 +204,8 @@ def _create_violations_dataframe(violations: List[SQLInjectionResult]) -> pl.Dat
             "row_index": [],
             "column_name": [],
             "column_value": [],
-            "matched_pattern": []
+            "matched_pattern": [],
+            "message_json": [],
         })
     
     # Convert violations to dictionary format for DataFrame creation
@@ -190,7 +216,8 @@ def _create_violations_dataframe(violations: List[SQLInjectionResult]) -> pl.Dat
             "row_index": violation.row_index,
             "column_name": violation.column_name,
             "column_value": violation.column_value,
-            "matched_pattern": violation.matched_pattern
+            "matched_pattern": violation.matched_pattern,
+            "message_json": violation.message_json or "",
         })
     
     return pl.DataFrame(violation_data)
@@ -212,17 +239,19 @@ def _save_injection_report_to_parquet(report: SQLInjectionReport, output_dir: st
     # Create output directory if it doesn't exist
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
-    
-    # Generate timestamp for file naming
+
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    parquet_filename = f"sql_injection_report_{timestamp}.parquet"
-    parquet_path = output_path / parquet_filename
+    parquet_path = output_path / f"sql_injection_report.parquet"
     
     # Create violations DataFrame
     violations_df = _create_violations_dataframe(report.violations)
     
     # Write directly using polars for better control
     try:
+        # Remove existing file if it exists to ensure overwrite
+        if parquet_path.exists():
+            parquet_path.unlink()
+        
         violations_df.write_parquet(
             str(parquet_path),
             compression="zstd"
@@ -238,12 +267,6 @@ def _save_injection_report_to_parquet(report: SQLInjectionReport, output_dir: st
             f.write(f"Rows scanned: {report.total_rows_scanned:,}\n")
             f.write(f"Violations found: {report.violations_found}\n")
             f.write(f"Scan duration: {report.scan_duration_ms:.2f} ms\n\n")
-            for i, violation in enumerate(report.violations, 1):
-                f.write(f"{i}. File: {violation.file_path}\n")
-                f.write(f"   Row: {violation.row_index}\n")
-                f.write(f"   Column: {violation.column_name}\n")
-                f.write(f"   Value: {violation.column_value}\n")
-                f.write(f"   Regex: {violation.matched_pattern}\n\n")
         print(f"📁 SQL injection report saved as text: {text_file}")
         return str(text_file)
     
