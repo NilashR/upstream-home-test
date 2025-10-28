@@ -272,8 +272,7 @@ The project includes comprehensive test coverage:
 Run tests:
 ```bash
 poetry run pytest -v                    # All tests
-poetry run pytest tests/ -v             # All tests with verbose output
-poetry run pytest --cov=src/            # With coverage report
+poetry run pytest tests/ -v             # All tests with      
 ```
 
 ## 📦 Dependencies
