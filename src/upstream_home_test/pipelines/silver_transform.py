@@ -49,7 +49,7 @@ def _check_bronze_files_exist(bronze_dir: str, logger) -> bool:
     if not any(Path(bronze_dir).rglob("*.parquet")):
         log_pipeline_step(
             logger=logger,
-            step="silver_transform",
+            step=SILVER_LAYER,
             event="No Bronze parquet files found",
             metrics={"bronze_dir": bronze_dir},
             level="WARNING",

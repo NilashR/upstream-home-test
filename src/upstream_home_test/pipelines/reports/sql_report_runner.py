@@ -9,6 +9,7 @@ import duckdb
 
 from upstream_home_test.utils.logging_config import log_pipeline_step, setup_logging
 from upstream_home_test.utils.timing import elapsed_ms_since
+from upstream_home_test.constant import GOLD_LAYER
 
 
 class SQLReportRunner:
@@ -112,7 +113,7 @@ class SQLReportRunner:
         """
         log_pipeline_step(
             logger=self.logger,
-            step="sql_report_runner",
+            step=GOLD_LAYER,
             event=f"Executing SQL query for {report_name} report",
             metrics={"sql_file": sql_file, "input_rows": len(df)}
         )
@@ -129,7 +130,7 @@ class SQLReportRunner:
         # Log completion
         log_pipeline_step(
             logger=self.logger,
-            step="sql_report_runner",
+            step=GOLD_LAYER,
             event=f"Completed {report_name} report execution",
             metrics={"output_rows": len(result), "sql_file": sql_file}
         )
@@ -277,7 +278,8 @@ class SQLReportRunner:
         all_reports = self.list_available_reports()
         return self.run_multiple_reports(all_reports, silver_dir, **kwargs)
     
-    def _execute_sql_with_duckdb(self, df: pl.DataFrame, sql_query: str) -> pl.DataFrame:
+    @staticmethod
+    def _execute_sql_with_duckdb(df: pl.DataFrame, sql_query: str) -> pl.DataFrame:
         """Execute SQL query using DuckDB with polars DataFrame.
         
         Args:
@@ -292,7 +294,7 @@ class SQLReportRunner:
         
         try:
             # Register DataFrame as 'report_query' table in DuckDB
-            conn.register('report_query', df)
+            conn.register('report_table', df)
             
             # Execute SQL query using DuckDB's native query execution
             result = conn.execute(sql_query).pl()
