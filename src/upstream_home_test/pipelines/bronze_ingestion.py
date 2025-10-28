@@ -231,15 +231,18 @@ def run_bronze_ingestion(amount: int = 10000, output_dir: str | None = None) -> 
 
 def main():    
     try:
-        # Default values
-        amount = 10000
-        output_dir = BRONZE_PATH
+        import argparse
+
+        parser = argparse.ArgumentParser(description="Run Bronze layer ingestion")
+        parser.add_argument("--amount", type=int, default=10000, help="Number of messages to fetch from API")
+        parser.add_argument("--output-dir", type=str, default=BRONZE_PATH, help="Output directory for Bronze parquet files")
+        args = parser.parse_args()
 
         # Run pipeline
-        result = run_bronze_ingestion(amount, output_dir)
+        result = run_bronze_ingestion(args.amount, args.output_dir)
         
         # Print results
-        print(f"Bronze ingestion completed successfully!")
+        print("Bronze ingestion completed successfully!")
         print(f"Messages fetched: {result['messages_fetched']}")
         print(f"Files written: {result['files_written']}")
         print(f"Partitions created: {result['partitions']}")

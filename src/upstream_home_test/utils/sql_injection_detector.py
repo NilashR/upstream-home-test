@@ -160,15 +160,6 @@ def sql_injection_report(
                                 message_json=message_json,
                             )
                             violations.append(violation)
-                            violation = SQLInjectionResult(
-                                file_path=file_path_str,
-                                row_index=int(row_index),
-                                column_name=column,
-                                column_value=str(column_value),
-                                matched_pattern=pattern,
-                            )
-                            violations.append(violation)
-                            
                     except Exception as e:
                         # Log the error but continue with other patterns
                         print(f"Warning: Error checking pattern {i+1} in column '{column}' of file '{file_path_str}': {e}")
@@ -245,18 +236,18 @@ def _save_injection_report_to_parquet(report: SQLInjectionReport, output_dir: st
     
     # Create violations DataFrame
     violations_df = _create_violations_dataframe(report.violations)
-    
-    # Write directly using polars for better control
+
     try:
-        # Remove existing file if it exists to ensure overwrite
         if parquet_path.exists():
             parquet_path.unlink()
+
         
         violations_df.write_parquet(
             str(parquet_path),
             compression="zstd"
         )
         print(f"📁 SQL injection report saved: {parquet_path} ({len(violations_df)} violations)")
+            
     except Exception as e:
         print(f"⚠️  Warning: Could not save parquet file: {e}")
         # Fallback: create a simple text file with the report
@@ -291,49 +282,38 @@ def print_injection_report(report: SQLInjectionReport) -> None:
     if report.violations:
         print("VIOLATIONS DETECTED:")
         print("-" * 80)
-        
-        for i, violation in enumerate(report.violations, 1):
-            print(f"{i}. File: {violation.file_path}")
-            print(f"   Row: {violation.row_index}")
-            print(f"   Column: {violation.column_name}")
-            print(f"   Value: {violation.column_value}")
-            print(f"   Regex: {violation.matched_pattern}")
-            print()
     else:
         print("✅ No SQL injection patterns detected!")
 
 
 def main():
     try:
-        # Common SQL injection patterns
-        patterns = [
-            r"('(''|[^'])*')|(;)|(\b(ALTER|CREATE|DELETE|DROP|EXEC(UTE){0,1}|INSERT( +INTO){0,1}|MERGE|SELECT|UPDATE|UNION( +ALL){0,1})\b)"
-        ]
-        
-        # Columns to check for SQL injection
-        columns = ['vin', 'manufacturer', 'model']
-        
-        # Get absolute path to bronze directory
+        import argparse
+
+        parser = argparse.ArgumentParser(description="Run SQL injection detection")
+        parser.add_argument("--columns", nargs="*", default=['vin', 'manufacturer', 'model'], help="Columns to scan for SQL injection patterns")
+        parser.add_argument("--patterns", nargs="*", default=[r"('(''|[^'])*')|(;)|(\b(ALTER|CREATE|DELETE|DROP|EXEC(UTE){0,1}|INSERT( +INTO){0,1}|MERGE|SELECT|UPDATE|UNION( +ALL){0,1})\b)"], help="Regex patterns to detect SQL injection")
+        parser.add_argument("--data-path", type=str, default=BRONZE_PATH, help="Path to directory with parquet files to scan")
+        parser.add_argument("--output-dir", type=str, default=str(Path(__file__).parent.parent.parent.parent / "data" / "sql_injection_report"), help="Directory to write parquet report to")
+        args = parser.parse_args()
+
+        # Resolve absolute paths
         current_dir = Path(__file__).parent.parent.parent.parent
-        bronze_path = current_dir / BRONZE_PATH
-        
-        # Set up output directory for SQL injection reports
-        output_dir = current_dir / "data" / "sql_injection_report"
-        
+        bronze_path = current_dir / args.data_path if not Path(args.data_path).is_absolute() else Path(args.data_path)
+        output_dir = Path(args.output_dir)
+
         print("🔍 Running SQL injection detection...")
         print(f"📁 Scanning directory: {bronze_path}")
-        report = sql_injection_report(columns, patterns, str(bronze_path))
+        report = sql_injection_report(args.columns, args.patterns, str(bronze_path))
         print_injection_report(report)
         
         # Save report to parquet file
+        parquet_path = _save_injection_report_to_parquet(report, str(output_dir))
         if report.violations_found > 0:
-            parquet_path = _save_injection_report_to_parquet(report, str(output_dir))
             print(f"⚠️  Found {report.violations_found} potential SQL injection patterns!")
             print(f"📊 Report saved to: {parquet_path}")
             sys.exit(1)
         else:
-            # Still save empty report for audit trail
-            parquet_path = _save_injection_report_to_parquet(report, str(output_dir))
             print("✅ No SQL injection patterns detected!")
             print(f"📊 Report saved to: {parquet_path}")
             sys.exit(0)

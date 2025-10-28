@@ -321,15 +321,18 @@ def run_silver_transform(
 
 def main():    
     try:
-        # Parse command line arguments
-        bronze_dir = BRONZE_PATH
-        output_path = SILVER_PATH
-        
+        import argparse
+
+        parser = argparse.ArgumentParser(description="Run Silver layer transformation")
+        parser.add_argument("--bronze-dir", type=str, default=BRONZE_PATH, help="Path to Bronze parquet directory")
+        parser.add_argument("--output-path", type=str, default=SILVER_PATH, help="Output directory for Silver parquet files")
+        args = parser.parse_args()
+
         # Run pipeline
-        result = run_silver_transform(bronze_dir, output_path)
+        result = run_silver_transform(args.bronze_dir, args.output_path)
         
         # Print results
-        print(f"Silver transformation completed successfully!")
+        print("Silver transformation completed successfully!")
         print(f"Input rows: {result['input_rows']}")
         print(f"Filtered rows: {result['filtered_rows']}")
         print(f"Output rows: {result['output_rows']}")

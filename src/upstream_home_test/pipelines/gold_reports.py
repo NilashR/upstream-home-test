@@ -170,10 +170,14 @@ def write_reports_to_parquet(result: Dict[str, Any], gold_dir: str = None) -> No
 
 def main():
     try:
-        silver_dir = SILVER_PATH
-        report_names = ['fastest_vehicles_per_hour', 'vin_last_state']  # Default reports
-        
-        run_gold_reports(report_names, silver_dir)
+        import argparse
+
+        parser = argparse.ArgumentParser(description="Run Gold layer reports")
+        parser.add_argument("--reports", nargs="*", default=['fastest_vehicles_per_hour', 'vin_last_state'], help="List of report names to run")
+        parser.add_argument("--silver-dir", type=str, default=SILVER_PATH, help="Path to Silver parquet directory")
+        args = parser.parse_args()
+
+        run_gold_reports(args.reports, args.silver_dir)
         
     except Exception as e:
         print(f"Gold reports generation failed: {str(e)}")
