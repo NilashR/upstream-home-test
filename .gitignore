@@ -22,11 +22,19 @@ var/
 wheels/
 share/python-wheels/
 *.egg-info/
+# Ignore data files but keep folder structure
 data/bronze/**/*
+!data/bronze/.gitkeep
 data/silver/**/*
+!data/silver/.gitkeep
 data/gold/**/*
+!data/gold/.gitkeep
 data/sql_injection_report/**/*
-logs/
+!data/sql_injection_report/.gitkeep
+
+# Ignore log files but keep folder structure
+logs/**/*
+!logs/.gitkeep
 .installed.cfg
 *.egg
 MANIFEST
