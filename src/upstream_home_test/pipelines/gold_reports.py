@@ -8,6 +8,64 @@ from upstream_home_test.io.parquet_writer import GenericParquetWriter
 from upstream_home_test.constant import SILVER_PATH, GOLD_PATH
 
 
+def _resolve_silver_directory(silver_dir: str = None) -> str:
+    """Resolve absolute path for silver directory.
+    
+    Args:
+        silver_dir: Silver directory path (None for default)
+        
+    Returns:
+        Absolute path to silver directory
+    """
+    if silver_dir is None:
+        from upstream_home_test.utils.logging_config import get_project_root
+        project_root = get_project_root()
+        return str(project_root / SILVER_PATH)
+    
+    return silver_dir
+
+
+def _get_report_names_to_run(report_names: List[str] = None) -> List[str]:
+    """Get list of report names to run.
+    
+    Args:
+        report_names: List of specific report names (None for all)
+        
+    Returns:
+        List of report names to run
+    """
+    if report_names is None:
+        runner = SQLReportRunner()
+        return runner.list_available_reports()
+    
+    return report_names
+
+
+def _run_sql_reports(report_names: List[str], silver_dir: str, **kwargs) -> Dict[str, Any]:
+    """Run SQL reports using the report runner.
+    
+    Args:
+        report_names: List of report names to run
+        silver_dir: Directory containing Silver layer Parquet files
+        **kwargs: Additional report-specific parameters
+        
+    Returns:
+        Dictionary with report results and statistics
+    """
+    runner = SQLReportRunner()
+    return runner.run_multiple_reports(report_names, silver_dir, **kwargs)
+
+
+def _perform_gold_side_effects(result: Dict[str, Any]) -> None:
+    """Perform side effects for Gold layer (cleanup and write parquet).
+    
+    Args:
+        result: Report results dictionary
+    """
+    cleanup_old_parquet_files()
+    write_reports_to_parquet(result)
+
+
 def run_gold_reports(
     report_names: List[str] = None,
     silver_dir: str = None,
@@ -30,24 +88,17 @@ def run_gold_reports(
         ValueError: If any report name is invalid
         FileNotFoundError: If no Silver data found
     """
-    # Use absolute path if not provided
-    if silver_dir is None:
-        from upstream_home_test.utils.logging_config import get_project_root
-        project_root = get_project_root()
-        silver_dir = str(project_root / SILVER_PATH)
+    # Resolve silver directory path
+    silver_dir = _resolve_silver_directory(silver_dir)
     
-    runner = SQLReportRunner()
+    # Get report names to run
+    report_names = _get_report_names_to_run(report_names)
     
-    # If no specific reports requested, run all
-    if report_names is None:
-        report_names = runner.list_available_reports()
-    
-    # Always run multiple reports (simplified approach)
-    result = runner.run_multiple_reports(report_names, silver_dir, **kwargs)
+    # Run SQL reports
+    result = _run_sql_reports(report_names, silver_dir, **kwargs)
 
     # Perform side-effects like Silver: cleanup and write parquet inside the run function
-    cleanup_old_parquet_files()
-    write_reports_to_parquet(result)
+    _perform_gold_side_effects(result)
 
     return result
 

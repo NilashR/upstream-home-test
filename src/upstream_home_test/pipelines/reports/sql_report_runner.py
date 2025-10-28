@@ -41,34 +41,45 @@ class SQLReportRunner:
         """
         return self.available_reports.copy()
     
-    def run_sql_report(self, report_name: str, silver_dir: str, **kwargs) -> Dict[str, Any]:
-        """Run a single SQL report.
+    def _load_sql_query(self, report_name: str) -> tuple[str, str]:
+        """Load SQL query from file.
         
         Args:
-            report_name: Name of the SQL report to run (without .sql extension)
-            silver_dir: Directory containing Silver layer Parquet files
-            **kwargs: Additional parameters (unused for SQL reports)
+            report_name: Name of the report
             
         Returns:
-            Dictionary with report results
+            Tuple of (sql_file_path, sql_query_string)
             
         Raises:
-            ValueError: If report name is not found
-            FileNotFoundError: If SQL file or Silver data not found
+            FileNotFoundError: If SQL file not found
         """
-        # Load SQL query from file
         sql_file = self.queries_dir / f"{report_name}.sql"
         if not sql_file.exists():
             raise FileNotFoundError(f"SQL file not found: {sql_file}")
         
         with open(sql_file, 'r') as f:
             sql_query = f.read().strip()
+        
+        return str(sql_file), sql_query
 
+    def _load_silver_data(self, silver_dir: str, report_name: str) -> pl.DataFrame:
+        """Load Silver layer data.
+        
+        Args:
+            silver_dir: Directory containing Silver parquet files
+            report_name: Name of the report for logging
+            
+        Returns:
+            Polars DataFrame with Silver data
+            
+        Raises:
+            FileNotFoundError: If no Silver data found
+        """
         log_pipeline_step(
             logger=self.logger,
             step="sql_report_runner",
             event=f"Reading Silver data for {report_name} report",
-            metrics={"silver_dir": silver_dir, "sql_file": str(sql_file)}
+            metrics={"silver_dir": silver_dir}
         )
         
         # Scan all Silver Parquet files
@@ -85,18 +96,28 @@ class SQLReportRunner:
             )
             raise FileNotFoundError(error_msg)
         
-        # Use polars DataFrame directly with DuckDB
-        df_polars = df
+        return df
+
+    def _execute_report_query(self, df: pl.DataFrame, sql_query: str, report_name: str, sql_file: str) -> pl.DataFrame:
+        """Execute SQL query on the DataFrame.
         
-        # Execute SQL query using DuckDB
+        Args:
+            df: Input DataFrame
+            sql_query: SQL query to execute
+            report_name: Name of the report
+            sql_file: Path to SQL file for logging
+            
+        Returns:
+            Result DataFrame
+        """
         log_pipeline_step(
             logger=self.logger,
             step="sql_report_runner",
             event=f"Executing SQL query for {report_name} report",
-            metrics={"sql_file": str(sql_file), "input_rows": len(df_polars)}
+            metrics={"sql_file": sql_file, "input_rows": len(df)}
         )
         
-        result = self._execute_sql_with_duckdb(df_polars, sql_query)
+        result = self._execute_sql_with_duckdb(df, sql_query)
         
         # Convert timestamp columns back to proper datetime if they exist
         for col in result.columns:
@@ -105,18 +126,45 @@ class SQLReportRunner:
                     pl.col(col).str.to_datetime().dt.replace_time_zone("UTC")
                 )
         
+        # Log completion
         log_pipeline_step(
             logger=self.logger,
             step="sql_report_runner",
             event=f"Completed {report_name} report execution",
-            metrics={"output_rows": len(result), "sql_file": str(sql_file)}
+            metrics={"output_rows": len(result), "sql_file": sql_file}
         )
+        
+        return result
+
+    def run_sql_report(self, report_name: str, silver_dir: str, **kwargs) -> Dict[str, Any]:
+        """Run a single SQL report.
+        
+        Args:
+            report_name: Name of the SQL report to run (without .sql extension)
+            silver_dir: Directory containing Silver layer Parquet files
+            **kwargs: Additional parameters (unused for SQL reports)
+            
+        Returns:
+            Dictionary with report results
+            
+        Raises:
+            ValueError: If report name is not found
+            FileNotFoundError: If SQL file or Silver data not found
+        """
+        # Load SQL query from file
+        sql_file, sql_query = self._load_sql_query(report_name)
+        
+        # Load Silver data
+        df = self._load_silver_data(silver_dir, report_name)
+        
+        # Execute SQL query
+        result = self._execute_report_query(df, sql_query, report_name, sql_file)
         
         return {
             "status": "completed",
             "report_name": report_name,
-            "sql_file": str(sql_file),
-            "input_rows": len(df_polars),
+            "sql_file": sql_file,
+            "input_rows": len(df),
             "output_rows": len(result),
             "result_data": result
         }
@@ -215,13 +263,25 @@ class SQLReportRunner:
             "total_duration_ms": round(total_duration_ms, 2),
             "results": results
         }
-
-    @staticmethod
-    def _execute_sql_with_duckdb(df: pl.DataFrame, sql_query: str) -> pl.DataFrame:
+    
+    def run_all_reports(self, silver_dir: str, **kwargs) -> Dict[str, Any]:
+        """Run all available SQL reports.
+        
+        Args:
+            silver_dir: Directory containing Silver layer Parquet files
+            **kwargs: Additional parameters (unused for SQL reports)
+            
+        Returns:
+            Dictionary with results from all reports
+        """
+        all_reports = self.list_available_reports()
+        return self.run_multiple_reports(all_reports, silver_dir, **kwargs)
+    
+    def _execute_sql_with_duckdb(self, df: pl.DataFrame, sql_query: str) -> pl.DataFrame:
         """Execute SQL query using DuckDB with polars DataFrame.
         
         Args:
-            df: Input polars DataFrame to be used as 'report_table' table
+            df: Input polars DataFrame to be used as 'report_query' table
             sql_query: SQL query string from .sql file
             
         Returns:
@@ -231,8 +291,8 @@ class SQLReportRunner:
         conn = duckdb.connect()
         
         try:
-            # Register DataFrame as 'report_table' table in DuckDB
-            conn.register('report_table', df)
+            # Register DataFrame as 'report_query' table in DuckDB
+            conn.register('report_query', df)
             
             # Execute SQL query using DuckDB's native query execution
             result = conn.execute(sql_query).pl()
@@ -242,3 +302,4 @@ class SQLReportRunner:
         finally:
             # Clean up
             conn.close()
+

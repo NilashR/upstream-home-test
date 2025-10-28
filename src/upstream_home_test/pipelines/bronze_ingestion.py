@@ -13,6 +13,150 @@ from upstream_home_test.constant import BRONZE_PATH, BRONZE_LAYER
 
 
 
+def _resolve_output_directory(output_dir: str | None = None) -> str:
+    """Resolve absolute path for output directory.
+    
+    Args:
+        output_dir: Output directory path (None for default)
+        
+    Returns:
+        Absolute path to output directory
+    """
+    if output_dir is None:
+        project_root = get_project_root()
+        return str(project_root / BRONZE_PATH)
+    
+    # Convert relative path to absolute if needed
+    if not Path(output_dir).is_absolute():
+        project_root = get_project_root()
+        return str(project_root / output_dir)
+    
+    return output_dir
+
+
+def _fetch_messages_from_api(amount: int, logger) -> list[Dict[str, Any]]:
+    """Fetch vehicle messages from the API.
+    
+    Args:
+        amount: Number of messages to fetch
+        logger: Logger instance for logging
+        
+    Returns:
+        List of vehicle message dictionaries
+        
+    Raises:
+        APIError: If API fetch fails
+    """
+    log_pipeline_step(
+        logger=logger,
+        step=BRONZE_LAYER,
+        event="Starting Bronze layer ingestion",
+        metrics={"amount": amount}
+    )
+    
+    messages = fetch_vehicle_messages(amount)
+    
+    if not messages:
+        log_pipeline_step(
+            logger=logger,
+            step=BRONZE_LAYER,
+            event="No messages received from API",
+            metrics={"amount_requested": amount, "amount_received": 0},
+            level="WARNING"
+        )
+        raise ValueError("No messages received from API")
+    
+    return messages
+
+
+def _write_messages_to_bronze(messages: list[Dict[str, Any]], output_dir: str, logger) -> Dict[str, Any]:
+    """Write messages to Bronze layer parquet files.
+    
+    Args:
+        messages: List of vehicle message dictionaries
+        output_dir: Output directory path
+        logger: Logger instance for logging
+        
+    Returns:
+        Write statistics dictionary
+        
+    Raises:
+        ParquetWriteError: If Parquet writing fails
+    """
+    log_pipeline_step(
+        logger=logger,
+        step=BRONZE_LAYER,
+        event="Writing messages to Bronze layer",
+        metrics={"messages": len(messages)}
+    )
+    
+    return write_parquet(
+        messages,
+        output_dir=output_dir,
+        partitioning_enabled=True,
+        validator_model=VehicleMessageRaw,
+        logger=logger,
+    )
+
+
+def _create_empty_bronze_result() -> Dict[str, Any]:
+    """Create an empty result dictionary for cases with no messages.
+    
+    Returns:
+        Empty result dictionary
+    """
+    return {
+        "status": "completed",
+        "messages_fetched": 0,
+        "files_written": 0,
+        "partitions": 0,
+        "duration_ms": 0
+    }
+
+
+def _log_bronze_completion(messages: list[Dict[str, Any]], write_stats: Dict[str, Any], 
+                          total_duration_ms: float, logger) -> None:
+    """Log Bronze ingestion completion.
+    
+    Args:
+        messages: List of fetched messages
+        write_stats: Write statistics from parquet writer
+        total_duration_ms: Total pipeline duration in milliseconds
+        logger: Logger instance for logging
+    """
+    log_pipeline_step(
+        logger=logger,
+        step=BRONZE_LAYER,
+        event="Bronze layer ingestion completed successfully",
+        metrics={
+            "messages_fetched": len(messages),
+            "files_written": write_stats["files_written"],
+            "partitions": write_stats["partitions"],
+            "total_duration_ms": round(total_duration_ms, 2)
+        }
+    )
+
+
+def _handle_bronze_error(error: Exception, error_type: str, duration_ms: float, logger) -> None:
+    """Handle and log Bronze ingestion errors.
+    
+    Args:
+        error: The exception that occurred
+        error_type: Type of error (API, Parquet, etc.)
+        duration_ms: Duration before error occurred
+        logger: Logger instance for logging
+    """
+    error_msg = f"{error_type} error during Bronze ingestion: {str(error)}"
+    
+    log_pipeline_step(
+        logger=logger,
+        step=BRONZE_LAYER,
+        event=error_msg,
+        metrics={"error": str(error), "duration_ms": round(duration_ms, 2)},
+        level="ERROR"
+    )
+
+
 def run_bronze_ingestion(amount: int = 10000, output_dir: str | None = None) -> Dict[str, Any]:
     """Run the complete Bronze layer ingestion pipeline.
     
@@ -37,76 +181,23 @@ def run_bronze_ingestion(amount: int = 10000, output_dir: str | None = None) -> 
     # Set up logging
     logger = setup_logging()
     
-    # Use absolute path for output directory
-    if output_dir is None:
-        project_root = get_project_root()
-        output_dir = str(project_root / BRONZE_PATH)
-    else:
-        # Convert relative path to absolute if needed
-        if not Path(output_dir).is_absolute():
-            project_root = get_project_root()
-            output_dir = str(project_root / output_dir)
+    # Resolve output directory
+    output_dir = _resolve_output_directory(output_dir)
     
     pipeline_start = time.time()
     
     try:
         # Step 1: Fetch messages from API
-        log_pipeline_step(
-            logger=logger,
-            step=BRONZE_LAYER,
-            event="Starting Bronze layer ingestion",
-            metrics={"amount": amount, "output_dir": output_dir}
-        )
-        
-        messages = fetch_vehicle_messages(amount)
-        
-        if not messages:
-            log_pipeline_step(
-                logger=logger,
-                step=BRONZE_LAYER,
-                event="No messages received from API",
-                metrics={"amount_requested": amount, "amount_received": 0},
-                level="WARNING"
-            )
-            return {
-                "status": "completed",
-                "messages_fetched": 0,
-                "files_written": 0,
-                "partitions": 0,
-                "duration_ms": 0
-            }
+        messages = _fetch_messages_from_api(amount, logger)
         
         # Step 2: Write to Bronze layer
-        log_pipeline_step(
-            logger=logger,
-            step=BRONZE_LAYER,
-            event="Writing messages to Bronze layer",
-            metrics={"messages": len(messages)}
-        )
-        
-        write_stats = write_parquet(
-            messages,
-            output_dir=output_dir,
-            partitioning_enabled=True,
-            validator_model=VehicleMessageRaw,
-            logger=logger,
-        )
+        write_stats = _write_messages_to_bronze(messages, output_dir, logger)
         
         # Calculate total duration
         total_duration_ms = elapsed_ms_since(pipeline_start)
         
         # Log completion
-        log_pipeline_step(
-            logger=logger,
-            step=BRONZE_LAYER,
-            event="Bronze layer ingestion completed successfully",
-            metrics={
-                "messages_fetched": len(messages),
-                "files_written": write_stats["files_written"],
-                "partitions": write_stats["partitions"],
-                "total_duration_ms": round(total_duration_ms, 2)
-            }
-        )
+        _log_bronze_completion(messages, write_stats, total_duration_ms, logger)
         
         return {
             "status": "completed",
@@ -116,47 +207,26 @@ def run_bronze_ingestion(amount: int = 10000, output_dir: str | None = None) -> 
             "duration_ms": round(total_duration_ms, 2)
         }
         
+    except ValueError as e:
+        # Handle case where no messages were fetched
+        if "No messages received from API" in str(e):
+            return _create_empty_bronze_result()
+        raise
+        
     except APIError as e:
         duration_ms = elapsed_ms_since(pipeline_start)
-        error_msg = f"API error during Bronze ingestion: {str(e)}"
-        
-        log_pipeline_step(
-            logger=logger,
-            step=BRONZE_LAYER,
-            event=error_msg,
-            metrics={"error": str(e), "duration_ms": round(duration_ms, 2)},
-            level="ERROR"
-        )
-        
+        _handle_bronze_error(e, "API", duration_ms, logger)
         raise
         
     except ParquetWriteError as e:
         duration_ms = elapsed_ms_since(pipeline_start)
-        error_msg = f"Parquet write error during Bronze ingestion: {str(e)}"
-        
-        log_pipeline_step(
-            logger=logger,
-            step=BRONZE_LAYER,
-            event=error_msg,
-            metrics={"error": str(e), "duration_ms": round(duration_ms, 2)},
-            level="ERROR"
-        )
-        
+        _handle_bronze_error(e, "Parquet write", duration_ms, logger)
         raise
         
     except Exception as e:
         duration_ms = elapsed_ms_since(pipeline_start)
-        error_msg = f"Unexpected error during Bronze ingestion: {str(e)}"
-        
-        log_pipeline_step(
-            logger=logger,
-            step=BRONZE_LAYER,
-            event=error_msg,
-            metrics={"error": str(e), "duration_ms": round(duration_ms, 2)},
-            level="ERROR"
-        )
-        
-        raise RuntimeError(error_msg) from e
+        _handle_bronze_error(e, "Unexpected", duration_ms, logger)
+        raise RuntimeError(f"Unexpected error during Bronze ingestion: {str(e)}") from e
 
 
 def main():    

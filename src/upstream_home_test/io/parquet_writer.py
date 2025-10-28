@@ -88,6 +88,136 @@ class GenericParquetWriter:
         
         return validated_messages
 
+    def _prepare_dataframe(self, data: List[Dict[str, Any]] | pl.DataFrame) -> pl.DataFrame:
+        """Prepare data as a Polars DataFrame.
+        
+        Args:
+            data: List of dictionaries or Polars DataFrame
+            
+        Returns:
+            Prepared Polars DataFrame
+            
+        Raises:
+            ValueError: If data is empty
+        """
+        if isinstance(data, pl.DataFrame):
+            if data.is_empty():
+                log_pipeline_step(
+                    logger=self.logger,
+                    step="parquet_write",
+                    event="No data to write",
+                    metrics={"rows": 0, "files_written": 0}
+                )
+                raise ValueError("No data to write")
+            return data
+        else:
+            if not data:
+                log_pipeline_step(
+                    logger=self.logger,
+                    step="parquet_write",
+                    event="No messages to write",
+                    metrics={"messages": 0, "files_written": 0}
+                )
+                raise ValueError("No messages to write")
+            
+            # Validate messages if it's a list of dicts
+            validated_messages = self.validate_messages(data)
+            message_dicts = [msg.model_dump() for msg in validated_messages]
+            return pl.DataFrame(message_dicts)
+
+    def _add_partitioning_columns(self, df: pl.DataFrame) -> pl.DataFrame:
+        """Add partitioning columns to DataFrame if partitioning is enabled.
+        
+        Args:
+            df: Input DataFrame
+            
+        Returns:
+            DataFrame with partitioning columns added
+        """
+        if self.partitioning_enabled and "timestamp" in df.columns:
+            return df.with_columns([
+                pl.col("timestamp").dt.date().alias("date"),
+                pl.col("timestamp").dt.hour().alias("hour")
+            ])
+        return df
+
+    def _write_partitioned_data(self, df: pl.DataFrame) -> int:
+        """Write data with partitioning enabled.
+        
+        Args:
+            df: DataFrame to write
+            
+        Returns:
+            Number of unique partitions created
+        """
+        # Group by partition columns
+        partitions = df.group_by(self.partition_columns, maintain_order=True)
+        
+        # Write each partition
+        for group_key, partition_df in partitions:
+            self._write_partition(group_key, partition_df)
+        
+        # Count unique partitions
+        return df.select(self.partition_columns).unique().height
+
+    def _write_unpartitioned_data(self, df: pl.DataFrame) -> int:
+        """Write data without partitioning.
+        
+        Args:
+            df: DataFrame to write
+            
+        Returns:
+            Always returns 1 for single file
+        """
+        self._write_single_file(df)
+        return 1
+
+    def _log_write_success(self, unique_partitions: int, start_time: float) -> None:
+        """Log successful write operation.
+        
+        Args:
+            unique_partitions: Number of partitions created
+            start_time: Start time of write operation
+        """
+        duration_ms = elapsed_ms_since(start_time)
+        
+        log_pipeline_step(
+            logger=self.logger,
+            step="parquet_write",
+            event=f"Successfully wrote {self.total_rows} rows to {self.files_written} files",
+            metrics={
+                "total_rows": self.total_rows,
+                "files_written": self.files_written,
+                "partitions": unique_partitions,
+                "duration_ms": round(duration_ms, 2),
+                "output_dir": self.output_dir,
+                "partitioning_enabled": self.partitioning_enabled
+            }
+        )
+
+    def _log_write_error(self, error: Exception, df: pl.DataFrame, start_time: float) -> None:
+        """Log write operation error.
+        
+        Args:
+            error: Exception that occurred
+            df: DataFrame that failed to write
+            start_time: Start time of write operation
+        """
+        duration_ms = elapsed_ms_since(start_time)
+        error_msg = f"Failed to write Parquet files: {str(error)}"
+        
+        log_pipeline_step(
+            logger=self.logger,
+            step="parquet_write",
+            event=error_msg,
+            metrics={
+                "error": str(error),
+                "duration_ms": round(duration_ms, 2),
+                "rows_attempted": len(df)
+            },
+            level="ERROR"
+        )
+
     def write(self, data: List[Dict[str, Any]] | pl.DataFrame) -> Dict[str, Any]:
         """Write data to Parquet files with optional partitioning.
         
@@ -100,101 +230,44 @@ class GenericParquetWriter:
         Raises:
             ParquetWriteError: If writing fails
         """
-        if isinstance(data, pl.DataFrame):
-            if data.is_empty():
-                log_pipeline_step(
-                    logger=self.logger,
-                    step="parquet_write",
-                    event="No data to write",
-                    metrics={"rows": 0, "files_written": 0}
-                )
-                return {"rows": 0, "files_written": 0, "partitions": 0}
-            df = data
-        else:
-            if not data:
-                log_pipeline_step(
-                    logger=self.logger,
-                    step="parquet_write",
-                    event="No messages to write",
-                    metrics={"messages": 0, "files_written": 0}
-                )
-                return {"messages": 0, "files_written": 0, "partitions": 0}
-            
-            # Validate messages if it's a list of dicts
-            validated_messages = self.validate_messages(data)
-            message_dicts = [msg.model_dump() for msg in validated_messages]
-            df = pl.DataFrame(message_dicts)
-        
         start_time = time.time()
         
         try:
+            # Prepare DataFrame
+            df = self._prepare_dataframe(data)
+            
             # Reset statistics
             self.files_written = 0
             self.total_rows = 0
             self.partitions_created = 0
             
+            # Add partitioning columns if needed
+            df = self._add_partitioning_columns(df)
+            
+            # Write data with or without partitioning
             if self.partitioning_enabled and "timestamp" in df.columns:
-                # Add partitioning columns if timestamp exists
-                df = df.with_columns([
-                    pl.col("timestamp").dt.date().alias("date"),
-                    pl.col("timestamp").dt.hour().alias("hour")
-                ])
-                
-                # Group by partition columns
-                partitions = df.group_by(self.partition_columns, maintain_order=True)
-                
-                # Write each partition
-                for group_key, partition_df in partitions:
-                    self._write_partition(group_key, partition_df)
-                
-                # Count unique partitions
-                unique_partitions = df.select(self.partition_columns).unique().height
+                unique_partitions = self._write_partitioned_data(df)
             else:
-                # Write as single file without partitioning
-                self._write_single_file(df)
-                unique_partitions = 1
+                unique_partitions = self._write_unpartitioned_data(df)
             
-            duration_ms = elapsed_ms_since(start_time)
-            
-            # Log summary
-            log_pipeline_step(
-                logger=self.logger,
-                step="parquet_write",
-                event=f"Successfully wrote {self.total_rows} rows to {self.files_written} files",
-                metrics={
-                    "total_rows": self.total_rows,
-                    "files_written": self.files_written,
-                    "partitions": unique_partitions,
-                    "duration_ms": round(duration_ms, 2),
-                    "output_dir": self.output_dir,
-                    "partitioning_enabled": self.partitioning_enabled
-                }
-            )
+            # Log success
+            self._log_write_success(unique_partitions, start_time)
             
             return {
                 "rows": self.total_rows,
                 "files_written": self.files_written,
                 "partitions": unique_partitions,
-                "duration_ms": round(duration_ms, 2)
+                "duration_ms": round(elapsed_ms_since(start_time), 2)
             }
             
+        except ValueError:
+            # Handle empty data cases
+            return {"rows": 0, "files_written": 0, "partitions": 0, "duration_ms": 0}
+            
         except Exception as e:
-            duration_ms = elapsed_ms_since(start_time)
-            error_msg = f"Failed to write Parquet files: {str(e)}"
-            
-            log_pipeline_step(
-                logger=self.logger,
-                step="parquet_write",
-                event=error_msg,
-                metrics={
-                    "error": str(e),
-                    "duration_ms": round(duration_ms, 2),
-                    "rows_attempted": len(df)
-                },
-                level="ERROR"
-            )
-            
-            raise ParquetWriteError(error_msg) from e
+            # Log error and re-raise as ParquetWriteError
+            self._log_write_error(e, df, start_time)
+            raise ParquetWriteError(f"Failed to write Parquet files: {str(e)}") from e
 
     def _write_single_file(self, df: pl.DataFrame) -> None:
         """Write DataFrame as a single parquet file.
