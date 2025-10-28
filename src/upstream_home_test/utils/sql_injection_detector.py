@@ -200,3 +200,39 @@ def print_injection_report(report: SQLInjectionReport) -> None:
         print("✅ No SQL injection patterns detected!")
 
 
+def main():
+    """Main function for SQL injection detection CLI."""
+    import sys
+    
+    try:
+        # Common SQL injection patterns
+        patterns = [
+            r"('(''|[^'])*')|(;)|(\b(ALTER|CREATE|DELETE|DROP|EXEC(UTE){0,1}|INSERT( +INTO){0,1}|MERGE|SELECT|UPDATE|UNION( +ALL){0,1})\b)",
+            r"(\bOR\b|\bAND\b).*?(\bOR\b|\bAND\b)",
+            r"(--|#|/\*|\*/)",
+            r"(\bUNION\b.*?\bSELECT\b)",
+            r"(\bDROP\b.*?\bTABLE\b)"
+        ]
+        
+        # Columns to check for SQL injection
+        columns = ['vin', 'manufacturer', 'model']
+        
+        print("🔍 Running SQL injection detection...")
+        report = sql_injection_report(columns, patterns)
+        print_injection_report(report)
+        
+        # Exit with appropriate code
+        if report.violations_found > 0:
+            print(f"⚠️  Found {report.violations_found} potential SQL injection patterns!")
+            sys.exit(1)
+        else:
+            print("✅ No SQL injection patterns detected!")
+            sys.exit(0)
+            
+    except Exception as e:
+        print(f"❌ SQL injection detection failed: {str(e)}")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
