@@ -14,8 +14,8 @@ from upstream_home_test.constant import BRONZE_PATH, SILVER_PATH, SILVER_LAYER
 
 
 def run_silver_transform(
-    bronze_dir: str = BRONZE_PATH,
-    output_path: str = SILVER_PATH
+    bronze_dir: str = None,
+    output_path: str = None
 ) -> Dict[str, Any]:
     """Run the complete Silver layer transformation pipeline.
     
@@ -36,6 +36,17 @@ def run_silver_transform(
     Raises:
         ParquetWriteError: If Parquet writing fails
     """
+    # Use absolute paths if not provided
+    if bronze_dir is None:
+        from upstream_home_test.utils.logging_config import get_project_root
+        project_root = get_project_root()
+        bronze_dir = str(project_root / BRONZE_PATH)
+    
+    if output_path is None:
+        from upstream_home_test.utils.logging_config import get_project_root
+        project_root = get_project_root()
+        output_path = str(project_root / SILVER_PATH)
+    
     # Set up logging (don't clear log file to preserve bronze logs)
     logger = setup_logging(clear_log_file=False)
     

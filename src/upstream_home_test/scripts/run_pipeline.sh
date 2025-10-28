@@ -10,12 +10,12 @@ echo "=================================="
 
 # Get the script directory and project root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 # Change to project root
 cd "$PROJECT_ROOT"
 
-echo "📁 Working directory: $PROJECT_ROOT"
+echo "📁 Working directory: $(pwd)"
 
 # Activate Poetry environment
 echo "🔧 Activating Poetry environment..."

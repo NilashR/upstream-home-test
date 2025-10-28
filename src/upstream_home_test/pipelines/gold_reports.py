@@ -10,7 +10,7 @@ from upstream_home_test.constant import SILVER_PATH, GOLD_PATH
 
 def run_gold_reports(
     report_names: List[str] = None,
-    silver_dir: str = SILVER_PATH,
+    silver_dir: str = None,
     **kwargs
 ) -> Dict[str, Any]:
     """Run Gold layer reports using SQL files and DuckDB.
@@ -30,6 +30,12 @@ def run_gold_reports(
         ValueError: If any report name is invalid
         FileNotFoundError: If no Silver data found
     """
+    # Use absolute path if not provided
+    if silver_dir is None:
+        from upstream_home_test.utils.logging_config import get_project_root
+        project_root = get_project_root()
+        silver_dir = str(project_root / SILVER_PATH)
+    
     runner = SQLReportRunner()
     
     # If no specific reports requested, run all
@@ -46,12 +52,17 @@ def run_gold_reports(
     return result
 
 
-def cleanup_old_parquet_files(gold_dir: str = GOLD_PATH) -> None:
+def cleanup_old_parquet_files(gold_dir: str = None) -> None:
     """Delete existing parquet files in the gold directory.
     
     Args:
         gold_dir: Directory containing parquet files to clean up
     """
+    if gold_dir is None:
+        from upstream_home_test.utils.logging_config import get_project_root
+        project_root = get_project_root()
+        gold_dir = str(project_root / GOLD_PATH)
+    
     gold_path = Path(gold_dir)
     if gold_path.exists():
         parquet_files = list(gold_path.glob("*.parquet"))
@@ -64,13 +75,18 @@ def cleanup_old_parquet_files(gold_dir: str = GOLD_PATH) -> None:
         print("🧹 Gold directory doesn't exist yet, no cleanup needed")
 
 
-def write_reports_to_parquet(result: Dict[str, Any], gold_dir: str = GOLD_PATH) -> None:
+def write_reports_to_parquet(result: Dict[str, Any], gold_dir: str = None) -> None:
     """Write report results to parquet files in the gold directory using GenericParquetWriter.
     
     Args:
         result: Dictionary containing report results from run_gold_reports
         gold_dir: Directory to write parquet files to
     """
+    if gold_dir is None:
+        from upstream_home_test.utils.logging_config import get_project_root
+        project_root = get_project_root()
+        gold_dir = str(project_root / GOLD_PATH)
+    
     # Generate timestamp for file naming
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     

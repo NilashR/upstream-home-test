@@ -203,22 +203,24 @@ def print_injection_report(report: SQLInjectionReport) -> None:
 def main():
     """Main function for SQL injection detection CLI."""
     import sys
+    from pathlib import Path
     
     try:
         # Common SQL injection patterns
         patterns = [
-            r"('(''|[^'])*')|(;)|(\b(ALTER|CREATE|DELETE|DROP|EXEC(UTE){0,1}|INSERT( +INTO){0,1}|MERGE|SELECT|UPDATE|UNION( +ALL){0,1})\b)",
-            r"(\bOR\b|\bAND\b).*?(\bOR\b|\bAND\b)",
-            r"(--|#|/\*|\*/)",
-            r"(\bUNION\b.*?\bSELECT\b)",
-            r"(\bDROP\b.*?\bTABLE\b)"
+            r"('(''|[^'])*')|(;)|(\b(ALTER|CREATE|DELETE|DROP|EXEC(UTE){0,1}|INSERT( +INTO){0,1}|MERGE|SELECT|UPDATE|UNION( +ALL){0,1})\b)"
         ]
         
         # Columns to check for SQL injection
         columns = ['vin', 'manufacturer', 'model']
         
+        # Get absolute path to bronze directory
+        current_dir = Path(__file__).parent.parent.parent.parent
+        bronze_path = current_dir / "data" / "bronze"
+        
         print("🔍 Running SQL injection detection...")
-        report = sql_injection_report(columns, patterns)
+        print(f"📁 Scanning directory: {bronze_path}")
+        report = sql_injection_report(columns, patterns, str(bronze_path))
         print_injection_report(report)
         
         # Exit with appropriate code
