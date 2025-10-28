@@ -1,4 +1,5 @@
 """Silver layer transformation pipeline."""
+import sys
 import time
 from pathlib import Path
 from typing import Any, Dict
@@ -9,7 +10,7 @@ from upstream_home_test.io.parquet_writer import GenericParquetWriter, ParquetWr
 from upstream_home_test.schemas.silver import map_gear_position
 from upstream_home_test.utils.logging_config import log_pipeline_step, setup_logging
 from upstream_home_test.utils.timing import elapsed_ms_since
-from src.constant import BRONZE_PATH, SILVER_PATH, SILVER_LAYER
+from upstream_home_test.constant import BRONZE_PATH, SILVER_PATH, SILVER_LAYER
 
 
 def run_silver_transform(
@@ -208,10 +209,7 @@ def run_silver_transform(
         raise RuntimeError(error_msg) from e
 
 
-def main():
-    """CLI entry point for Silver transformation."""
-    import sys
-    
+def main():    
     try:
         # Parse command line arguments
         bronze_dir = BRONZE_PATH

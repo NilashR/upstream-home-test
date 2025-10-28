@@ -8,7 +8,7 @@ import polars as pl
 import pytest
 from pydantic import ValidationError
 
-from src.upstream_home_test.utils.sql_injection_detector import (
+from upstream_home_test.utils.sql_injection_detector import (
     SQLInjectionResult,
     SQLInjectionReport,
     sql_injection_report,

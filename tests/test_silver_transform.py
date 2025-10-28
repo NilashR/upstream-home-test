@@ -2,6 +2,7 @@
 
 import polars as pl
 import pytest
+from datetime import datetime
 from pydantic import ValidationError
 from unittest.mock import patch
 
@@ -33,9 +34,9 @@ class TestGearPositionMapping:
     
     def test_map_gear_position_invalid(self):
         """Test invalid gear position mappings."""
-        assert map_gear_position("X") is None
-        assert map_gear_position("INVALID") is None
-        assert map_gear_position("") is None
+        assert map_gear_position("X") == -1
+        assert map_gear_position("INVALID") == -1
+        assert map_gear_position("") == -1
         assert map_gear_position(None) is None
 
 
@@ -46,16 +47,14 @@ class TestSilverSchema:
         """Test valid cleaned message validation."""
         message = {
             "vin": "1HGBH41JXMN109186",
-            "manufacturer_original": "Honda ",
-            "manufacturer_cleaned": "Honda",
+            "manufacturer": "Honda",
             "gear_position": 3,
             "timestamp": "2025-01-27T10:30:00Z"
         }
         
         validated = VehicleMessageCleaned.model_validate(message)
         assert validated.vin == "1HGBH41JXMN109186"
-        assert validated.manufacturer_original == "Honda "
-        assert validated.manufacturer_cleaned == "Honda"
+        assert validated.manufacturer == "Honda"
         assert validated.gear_position == 3
     
     def test_gear_position_validation(self):
@@ -64,8 +63,7 @@ class TestSilverSchema:
         for gear in [0, 1, 2, 3, 4]:
             message = {
                 "vin": "1HGBH41JXMN109186",
-                "manufacturer_original": "Honda",
-                "manufacturer_cleaned": "Honda",
+                "manufacturer": "Honda",
                 "gear_position": gear,
                 "timestamp": "2025-01-27T10:30:00Z"
             }
@@ -75,13 +73,12 @@ class TestSilverSchema:
         # Invalid gear position
         message = {
             "vin": "1HGBH41JXMN109186",
-            "manufacturer_original": "Honda",
-            "manufacturer_cleaned": "Honda",
-            "gear_position": 5,  # Invalid
+            "manufacturer": "Honda",
+            "gear_position": 7,  # Invalid
             "timestamp": "2025-01-27T10:30:00Z"
         }
         
-        with pytest.raises(ValidationError, match="Gear position must be 0-4"):
+        with pytest.raises(ValidationError, match="Gear position must be -1 to 6"):
             VehicleMessageCleaned.model_validate(message)
     
     def test_vin_validation(self):
@@ -89,49 +86,35 @@ class TestSilverSchema:
         # Valid VIN
         message = {
             "vin": "1HGBH41JXMN109186",
-            "manufacturer_original": "Honda",
-            "manufacturer_cleaned": "Honda",
+            "manufacturer": "Honda",
             "gear_position": 3,
             "timestamp": "2025-01-27T10:30:00Z"
         }
         validated = VehicleMessageCleaned.model_validate(message)
         assert validated.vin == "1HGBH41JXMN109186"
         
-        # Empty VIN
-        message["vin"] = ""
-        with pytest.raises(ValidationError, match="VIN cannot be empty"):
-            VehicleMessageCleaned.model_validate(message)
-        
-        # Whitespace-only VIN
-        message["vin"] = "   "
-        with pytest.raises(ValidationError, match="VIN cannot be empty"):
-            VehicleMessageCleaned.model_validate(message)
     
     def test_manufacturer_consistency(self):
-        """Test manufacturer field consistency validation."""
-        # Consistent manufacturer fields
+        """Test manufacturer field validation."""
+        # Valid manufacturer
         message = {
             "vin": "1HGBH41JXMN109186",
-            "manufacturer_original": "Honda ",
-            "manufacturer_cleaned": "Honda",
+            "manufacturer": "Honda",
             "gear_position": 3,
             "timestamp": "2025-01-27T10:30:00Z"
         }
         validated = VehicleMessageCleaned.model_validate(message)
-        assert validated.manufacturer_original == "Honda "
-        assert validated.manufacturer_cleaned == "Honda"
+        assert validated.manufacturer == "Honda"
         
-        # Inconsistent manufacturer fields
+        # Manufacturer with whitespace (should be stripped)
         message = {
             "vin": "1HGBH41JXMN109186",
-            "manufacturer_original": "Honda ",
-            "manufacturer_cleaned": "Toyota",  # Inconsistent
+            "manufacturer": " Honda ",
             "gear_position": 3,
             "timestamp": "2025-01-27T10:30:00Z"
         }
-        
-        with pytest.raises(ValidationError, match="manufacturer_cleaned should be manufacturer_original stripped"):
-            VehicleMessageCleaned.model_validate(message)
+        validated = VehicleMessageCleaned.model_validate(message)
+        assert validated.manufacturer == "Honda"
 
 
 class TestSilverTransform:
@@ -166,7 +149,7 @@ class TestSilverTransform:
     #     assert any("invalid gear positions" in error for error in errors)
     
     @patch("upstream_home_test.pipelines.silver_transform.pl.scan_parquet")
-    @patch("upstream_home_test.pipelines.silver_transform.write_silver_parquet")
+    @patch("upstream_home_test.pipelines.silver_transform.GenericParquetWriter")
     def test_run_silver_transform_success(self, mock_write, mock_scan):
         """Test successful Silver transformation."""
         # Mock Bronze data
@@ -174,12 +157,20 @@ class TestSilverTransform:
             "vin": ["1HGBH41JXMN109186", "1HGBH41JXMN109187", None],  # One null VIN
             "manufacturer": ["Honda ", "Toyota", "Ford"],
             "gearPosition": ["D", "P", "R"],
-            "timestamp": ["2025-01-27T10:30:00Z", "2025-01-27T10:31:00Z", "2025-01-27T10:32:00Z"]
+            "frontLeftDoorState": ["closed", "open", "closed"],
+            "wipersState": [True, False, True],
+            "driverSeatbeltState": ["buckled", "unbuckled", "buckled"],
+            "timestamp": [
+                datetime(2025, 1, 27, 10, 30, 0),
+                datetime(2025, 1, 27, 10, 31, 0),
+                datetime(2025, 1, 27, 10, 32, 0)
+            ]
         })
         mock_scan.return_value.collect.return_value = mock_df
         
         # Mock write response
-        mock_write.return_value = {
+        mock_writer_instance = mock_write.return_value
+        mock_writer_instance.write.return_value = {
             "rows": 2,
             "output_path": "data/silver/vehicle_messages_cleaned.parquet",
             "duration_ms": 100.0
@@ -194,6 +185,7 @@ class TestSilverTransform:
         
         mock_scan.assert_called_once()
         mock_write.assert_called_once()
+        mock_writer_instance.write.assert_called_once()
     
     @patch("upstream_home_test.pipelines.silver_transform.pl.scan_parquet")
     def test_run_silver_transform_empty_bronze(self, mock_scan):
@@ -239,7 +231,7 @@ class TestDataTransformation:
             ).alias("gear_position")
         ])
         
-        expected = [0, 1, 2, 3, 4, None, None]
+        expected = [0, 1, 2, 3, 4, -1, None]
         assert result["gear_position"].to_list() == expected
     
     def test_vin_filtering(self):

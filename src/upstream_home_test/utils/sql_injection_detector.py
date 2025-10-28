@@ -7,7 +7,7 @@ from typing import List
 
 import duckdb
 from pydantic import BaseModel
-
+from upstream_home_test.constant import BRONZE_PATH
 
 class SQLInjectionResult(BaseModel):
     """Result of SQL injection detection for a single record.
@@ -48,7 +48,7 @@ class SQLInjectionReport(BaseModel):
 def sql_injection_report(
     columns_to_check: List[str],
     injection_patterns: List[str],
-    data_path: str = "data/bronze",
+    data_path: str = BRONZE_PATH,
 ) -> SQLInjectionReport:
     """Detect potential SQL injection patterns.
     
@@ -59,7 +59,7 @@ def sql_injection_report(
     Args:
         columns_to_check: List of column names to check for SQL injection patterns
         injection_patterns: List of regex patterns to detect SQL injection attempts
-        data_path: Path to the data directory containing parquet files (default: "data/bronze")
+        data_path: Path to the data directory containing parquet files
         
     Returns:
         SQLInjectionReport containing all detected violations and scan statistics

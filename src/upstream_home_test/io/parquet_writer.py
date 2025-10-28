@@ -8,11 +8,9 @@ import polars as pl
 from pydantic import ValidationError
 
 from pydantic import BaseModel
-from upstream_home_test.schemas.bronze import VehicleMessageRaw
 from upstream_home_test.utils.logging_config import log_pipeline_step
 from upstream_home_test.utils.timing import elapsed_ms_since
-from src.constant import BRONZE_PATH
-from upstream_home_test.utils.partitioning import create_partition_filename, create_partition_path
+
 
 
 class ParquetWriteError(Exception):

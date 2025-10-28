@@ -1,5 +1,5 @@
 """Bronze layer ingestion pipeline."""
-
+import sys
 import time
 from pathlib import Path
 from typing import Any, Dict
@@ -9,7 +9,7 @@ from upstream_home_test.io.parquet_writer import ParquetWriteError, write_parque
 from upstream_home_test.schemas.bronze import VehicleMessageRaw
 from upstream_home_test.utils.logging_config import get_project_root, log_pipeline_step, setup_logging
 from upstream_home_test.utils.timing import elapsed_ms_since
-from src.constant import BRONZE_PATH, BRONZE_LAYER
+from upstream_home_test.constant import BRONZE_PATH, BRONZE_LAYER
 
 
 
@@ -159,9 +159,7 @@ def run_bronze_ingestion(amount: int = 10000, output_dir: str | None = None) -> 
         raise RuntimeError(error_msg) from e
 
 
-def main():
-    import sys
-    
+def main():    
     try:
         # Default values
         amount = 10000

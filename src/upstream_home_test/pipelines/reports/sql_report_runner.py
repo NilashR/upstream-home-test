@@ -215,21 +215,9 @@ class SQLReportRunner:
             "total_duration_ms": round(total_duration_ms, 2),
             "results": results
         }
-    
-    def run_all_reports(self, silver_dir: str, **kwargs) -> Dict[str, Any]:
-        """Run all available SQL reports.
-        
-        Args:
-            silver_dir: Directory containing Silver layer Parquet files
-            **kwargs: Additional parameters (unused for SQL reports)
-            
-        Returns:
-            Dictionary with results from all reports
-        """
-        all_reports = self.list_available_reports()
-        return self.run_multiple_reports(all_reports, silver_dir, **kwargs)
-    
-    def _execute_sql_with_duckdb(self, df: pl.DataFrame, sql_query: str) -> pl.DataFrame:
+
+    @staticmethod
+    def _execute_sql_with_duckdb(df: pl.DataFrame, sql_query: str) -> pl.DataFrame:
         """Execute SQL query using DuckDB with polars DataFrame.
         
         Args:
@@ -254,23 +242,3 @@ class SQLReportRunner:
         finally:
             # Clean up
             conn.close()
-    
-    def print_available_reports(self):
-        """Print information about available SQL reports."""
-        print("\n" + "="*80)
-        print("AVAILABLE SQL REPORTS")
-        print("="*80)
-        
-        for report_name in self.available_reports:
-            sql_file = self.queries_dir / f"{report_name}.sql"
-            print(f"\n📊 {report_name.upper().replace('_', ' ')}")
-            print(f"   SQL File: {sql_file}")
-            print(f"   Description: SQL-based report using DuckDB")
-        
-        print("\n" + "="*80)
-        print("Usage Examples:")
-        print("  python -m upstream_home_test.pipelines.gold_reports list")
-        print("  python -m upstream_home_test.pipelines.gold_reports vin_last_state")
-        print("  python -m upstream_home_test.pipelines.gold_reports vin_last_state data_quality")
-        print("  python -m upstream_home_test.pipelines.gold_reports all")
-        print("="*80)

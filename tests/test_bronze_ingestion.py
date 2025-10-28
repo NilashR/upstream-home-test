@@ -10,7 +10,7 @@ import pytest
 from upstream_home_test.io.api_client import APIError, APIClient
 from upstream_home_test.pipelines.bronze_ingestion import run_bronze_ingestion
 from upstream_home_test.schemas.bronze import VehicleMessageRaw
-from upstream_home_test.utils.partitioning import partition_by_datetime, split_by_size
+from upstream_home_test.utils.parquet import split_by_size
 
 
 class TestAPIClient:
@@ -102,38 +102,6 @@ class TestBronzeSchema:
 class TestPartitioning:
     """Test partitioning logic."""
     
-    def test_partition_by_datetime(self):
-        """Test datetime partitioning."""
-        messages = [
-            {
-                "vin": "1HGBH41JXMN109186",
-                "manufacturer": "Honda",
-                "gear": "D",
-                "timestamp": "2025-01-27T10:30:00Z"
-            },
-            {
-                "vin": "1HGBH41JXMN109187",
-                "manufacturer": "Toyota",
-                "gear": "P",
-                "timestamp": "2025-01-27T10:45:00Z"
-            },
-            {
-                "vin": "1HGBH41JXMN109188",
-                "manufacturer": "Ford",
-                "gear": "R",
-                "timestamp": "2025-01-27T11:15:00Z"
-            }
-        ]
-        
-        partitions = partition_by_datetime(messages)
-        
-        # Should have 2 partitions: 10:xx and 11:xx
-        assert len(partitions) == 2
-        assert ("2025-01-27", "10") in partitions
-        assert ("2025-01-27", "11") in partitions
-        assert len(partitions[("2025-01-27", "10")]) == 2
-        assert len(partitions[("2025-01-27", "11")]) == 1
-    
     def test_split_by_size(self):
         """Test size-based splitting."""
         # Create a large message list
@@ -162,7 +130,7 @@ class TestBronzeIngestion:
     """Test Bronze ingestion pipeline."""
     
     @patch("upstream_home_test.pipelines.bronze_ingestion.fetch_vehicle_messages")
-    @patch("upstream_home_test.pipelines.bronze_ingestion.write_bronze_parquet")
+    @patch("upstream_home_test.pipelines.bronze_ingestion.write_parquet")
     def test_run_bronze_ingestion_success(self, mock_write, mock_fetch):
         """Test successful Bronze ingestion."""
         # Mock API response
