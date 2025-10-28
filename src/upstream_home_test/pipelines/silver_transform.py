@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import polars as pl
+
 from upstream_home_test.constant import BRONZE_PATH, SILVER_LAYER, SILVER_PATH
 from upstream_home_test.io.parquet_writer import GenericParquetWriter, ParquetWriteError
 from upstream_home_test.schemas.silver import map_gear_position

@@ -2,10 +2,11 @@
 
 import time
 from pathlib import Path
-from typing import Any, Optional, Literal
+from typing import Any, Literal, Optional
 
 import polars as pl
 from pydantic import BaseModel, ValidationError
+
 from upstream_home_test.utils.logging_config import log_pipeline_step
 from upstream_home_test.utils.timing import elapsed_ms_since
 
