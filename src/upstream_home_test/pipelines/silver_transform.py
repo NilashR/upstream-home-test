@@ -9,11 +9,12 @@ import polars as pl
 from upstream_home_test.io.parquet_writer import GenericParquetWriter, ParquetWriteError
 from upstream_home_test.schemas.silver import GEAR_POSITION_MAPPING, map_gear_position
 from upstream_home_test.utils.logging_config import log_pipeline_step, setup_logging
+from src.constant import BRONZE_PATH, SILVER_PATH, SILVER_LAYER
 
 
 def run_silver_transform(
-    bronze_dir: str = "data/bronze",
-    output_path: str = "data/silver"
+    bronze_dir: str = BRONZE_PATH,
+    output_path: str = SILVER_PATH
 ) -> Dict[str, Any]:
     """Run the complete Silver layer transformation pipeline.
     
@@ -71,7 +72,7 @@ def run_silver_transform(
         input_rows = len(df)
         log_pipeline_step(
             logger=logger,
-            step="silver_transform",
+            step=SILVER_LAYER,
             event=f"Read {input_rows} rows from Bronze layer",
             metrics={"input_rows": input_rows}
         )
@@ -79,7 +80,7 @@ def run_silver_transform(
         # Step 2: Apply transformations
         log_pipeline_step(
             logger=logger,
-            step="silver_transform",
+            step=SILVER_LAYER,
             event="Applying data transformations",
             metrics={"input_rows": input_rows}
         )
@@ -90,7 +91,7 @@ def run_silver_transform(
         
         log_pipeline_step(
             logger=logger,
-            step="silver_transform",
+            step=SILVER_LAYER,
             event=f"Filtered {filtered_rows} rows with null VIN",
             metrics={"filtered_rows": filtered_rows, "remaining_rows": len(df_filtered)}
         )
@@ -113,7 +114,7 @@ def run_silver_transform(
         # Step 3: Write to Silver layer
         log_pipeline_step(
             logger=logger,
-            step="silver_transform",
+            step=SILVER_LAYER,
             event="Writing cleaned data to Silver layer",
             metrics={"output_rows": len(df_cleaned)}
         )
@@ -122,7 +123,7 @@ def run_silver_transform(
         writer = GenericParquetWriter(
             output_dir=output_path,
             partitioning_enabled=True,
-            compression="zstd",
+            compression="zstd", #TODO: CHECK WHY ZDTD
             logger=logger
         )
         
@@ -134,7 +135,7 @@ def run_silver_transform(
         # Log completion
         log_pipeline_step(
             logger=logger,
-            step="silver_transform",
+            step=SILVER_LAYER,
             event="Silver layer transformation completed successfully",
             metrics={
                 "input_rows": input_rows,
@@ -158,7 +159,7 @@ def run_silver_transform(
         
         log_pipeline_step(
             logger=logger,
-            step="silver_transform",
+            step=SILVER_LAYER,
             event=error_msg,
             metrics={"error": str(e), "duration_ms": round(duration_ms, 2)},
             level="ERROR"
@@ -172,7 +173,7 @@ def run_silver_transform(
         
         log_pipeline_step(
             logger=logger,
-            step="silver_transform",
+            step=SILVER_LAYER,
             event=error_msg,
             metrics={"error": str(e), "duration_ms": round(duration_ms, 2)},
             level="ERROR"
@@ -187,8 +188,8 @@ def main():
     
     try:
         # Parse command line arguments
-        bronze_dir = "data/bronze"
-        output_path = "data/silver"
+        bronze_dir = BRONZE_PATH
+        output_path = SILVER_PATH
         
         if len(sys.argv) > 1:
             bronze_dir = sys.argv[1]

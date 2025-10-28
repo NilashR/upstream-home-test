@@ -6,11 +6,12 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from upstream_home_test.pipelines.reports.sql_report_runner import SQLReportRunner
+from src.constant import SILVER_PATH, GOLD_PATH
 
 
 def run_gold_reports(
     report_names: List[str] = None,
-    silver_dir: str = "data/silver",
+    silver_dir: str = SILVER_PATH,
     **kwargs
 ) -> Dict[str, Any]:
     """Run Gold layer reports using SQL files and DuckDB.
@@ -40,7 +41,7 @@ def run_gold_reports(
     return runner.run_multiple_reports(report_names, silver_dir, **kwargs)
 
 
-def cleanup_old_csv_files(gold_dir: str = "data/gold") -> None:
+def cleanup_old_csv_files(gold_dir: str = GOLD_PATH) -> None:
     """Delete existing CSV files in the gold directory.
     
     Args:
@@ -60,7 +61,7 @@ def cleanup_old_csv_files(gold_dir: str = "data/gold") -> None:
         print("🧹 Gold directory doesn't exist yet, no cleanup needed")
 
 
-def write_reports_to_csv(result: Dict[str, Any], gold_dir: str = "data/gold") -> None:
+def write_reports_to_csv(result: Dict[str, Any], gold_dir: str = GOLD_PATH) -> None:
     """Write report results to CSV files in the gold directory.
     
     Args:
@@ -90,7 +91,7 @@ def main():
     """CLI entry point for Gold reports generation."""
     try:
         # Parse command line arguments
-        silver_dir = "data/silver"
+        silver_dir = SILVER_PATH
         report_names = ['fastest_vehicles_per_hour', 'vin_last_state']  # Default reports
         
         if len(sys.argv) > 1:
@@ -152,12 +153,6 @@ def main():
         
     except Exception as e:
         print(f"Gold reports generation failed: {str(e)}")
-        print("\nUsage:")
-        print("  python -m upstream_home_test.pipelines.gold_reports list")
-        print("  python -m upstream_home_test.pipelines.gold_reports vin_last_state")
-        print("  python -m upstream_home_test.pipelines.gold_reports vin_last_state data_quality")
-        print("  python -m upstream_home_test.pipelines.gold_reports all")
-        print("  python -m upstream_home_test.pipelines.gold_reports vin_last_state --silver-dir data/silver")
         sys.exit(1)
 
 

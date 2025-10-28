@@ -2,5 +2,6 @@
 <project version="4">
   <component name="SqlDialectMappings">
     <file url="file://$PROJECT_DIR$/src/upstream_home_test/pipelines/reports/queries/fastest_vehicles_per_hour.sql" dialect="GenericSQL" />
+    <file url="file://$PROJECT_DIR$/src/upstream_home_test/utils/sql_injection_detector.py" dialect="GenericSQL" />
   </component>
 </project>

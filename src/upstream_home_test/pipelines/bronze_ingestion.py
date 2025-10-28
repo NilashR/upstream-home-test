@@ -7,8 +7,8 @@ from typing import Any, Dict
 from upstream_home_test.io.api_client import APIError, fetch_vehicle_messages
 from upstream_home_test.io.parquet_writer import ParquetWriteError, write_bronze_parquet
 from upstream_home_test.utils.logging_config import get_project_root, log_pipeline_step, setup_logging
+from src.constant import BRONZE_PATH, BRONZE_LAYER
 
-BRONZE_LAYER = 'bronze_ingestion'
 
 
 def run_bronze_ingestion(amount: int = 10000, output_dir: str | None = None) -> Dict[str, Any]:
@@ -38,7 +38,7 @@ def run_bronze_ingestion(amount: int = 10000, output_dir: str | None = None) -> 
     # Use absolute path for output directory
     if output_dir is None:
         project_root = get_project_root()
-        output_dir = str(project_root / "data" / "bronze")
+        output_dir = str(project_root / BRONZE_PATH)
     else:
         # Convert relative path to absolute if needed
         if not Path(output_dir).is_absolute():
@@ -157,8 +157,8 @@ def main():
     
     try:
         # Default values
-        amount = 1000
-        output_dir = "data/bronze"
+        amount = 10000
+        output_dir = BRONZE_PATH
 
         # Parse command line arguments
         if len(sys.argv) > 1:
@@ -188,7 +188,7 @@ def main():
         print(f"Duration: {result['duration_ms']:.2f}ms")
         
     except Exception as e:
-        print(f"Bronze ingestion failed: {str(e)}")
+        print(f"{BRONZE_LAYER} failed: {str(e)}")
         sys.exit(1)
 
 
