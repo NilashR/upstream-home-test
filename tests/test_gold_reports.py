@@ -1,11 +1,9 @@
 """Tests for Gold layer reports pipeline."""
 
-import builtins
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
-
-from upstream_home_test.pipelines.gold_reports import run_gold_reports, main
+from upstream_home_test.pipelines.gold_reports import main, run_gold_reports
 
 
 class TestGoldReports:
@@ -14,7 +12,9 @@ class TestGoldReports:
     @patch("upstream_home_test.pipelines.gold_reports.SQLReportRunner")
     @patch("upstream_home_test.pipelines.gold_reports.write_reports_to_parquet")
     @patch("upstream_home_test.pipelines.gold_reports.cleanup_old_parquet_files")
-    def test_run_gold_reports_runs_all_when_none(self, mock_cleanup, mock_write, mock_runner_cls):
+    def test_run_gold_reports_runs_all_when_none(
+        self, mock_cleanup, mock_write, mock_runner_cls
+    ):
         runner = MagicMock()
         runner.list_available_reports.return_value = ["a", "b"]
         runner.run_multiple_reports.return_value = {"results": {}}
@@ -30,7 +30,9 @@ class TestGoldReports:
     @patch("upstream_home_test.pipelines.gold_reports.SQLReportRunner")
     @patch("upstream_home_test.pipelines.gold_reports.write_reports_to_parquet")
     @patch("upstream_home_test.pipelines.gold_reports.cleanup_old_parquet_files")
-    def test_run_gold_reports_with_specific_reports(self, mock_cleanup, mock_write, mock_runner_cls):
+    def test_run_gold_reports_with_specific_reports(
+        self, mock_cleanup, mock_write, mock_runner_cls
+    ):
         runner = MagicMock()
         runner.run_multiple_reports.return_value = {"results": {}}
         mock_runner_cls.return_value = runner
@@ -49,11 +51,12 @@ class TestGoldReports:
         main()
         mock_run.assert_called_once()
 
-    @patch("upstream_home_test.pipelines.gold_reports.run_gold_reports", side_effect=RuntimeError("boom"))
+    @patch(
+        "upstream_home_test.pipelines.gold_reports.run_gold_reports",
+        side_effect=RuntimeError("boom"),
+    )
     def test_main_failure_exits(self, mock_run):
         with pytest.raises(SystemExit) as exc:
             main()
         assert exc.value.code == 1
         mock_run.assert_called_once()
-
-
