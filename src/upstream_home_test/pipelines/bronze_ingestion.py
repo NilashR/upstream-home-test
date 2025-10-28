@@ -3,6 +3,7 @@ import sys
 import time
 from pathlib import Path
 from typing import Any
+import argparse
 
 from upstream_home_test.constant import BRONZE_LAYER, BRONZE_PATH
 from upstream_home_test.io.api_client import APIError, fetch_vehicle_messages
@@ -244,8 +245,6 @@ def run_bronze_ingestion(
 
 def main():
     try:
-        import argparse
-
         parser = argparse.ArgumentParser(description="Run Bronze layer ingestion")
         parser.add_argument(
             "--amount",

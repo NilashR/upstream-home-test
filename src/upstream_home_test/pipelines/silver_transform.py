@@ -3,7 +3,7 @@ import sys
 import time
 from pathlib import Path
 from typing import Any
-
+import argparse
 import polars as pl
 
 from upstream_home_test.constant import BRONZE_PATH, SILVER_LAYER, SILVER_PATH
@@ -77,7 +77,7 @@ def _read_bronze_data(bronze_dir: str, logger) -> pl.DataFrame:
     if df.is_empty():
         log_pipeline_step(
             logger=logger,
-            step="silver_transform",
+            step=SILVER_LAYER,
             event="No Bronze data found to transform",
             metrics={"bronze_dir": bronze_dir},
             level="WARNING",
@@ -239,7 +239,7 @@ def run_silver_transform(
     # Resolve absolute paths
     bronze_dir, output_path = _resolve_paths(bronze_dir, output_path)
 
-    # Set up logging (don't clear log file to preserve bronze logs)
+    # Set up logging
     logger = setup_logging(clear_log_file=False)
 
     pipeline_start = time.time()
@@ -248,7 +248,7 @@ def run_silver_transform(
         # Step 1: Check if Bronze files exist
         log_pipeline_step(
             logger=logger,
-            step="silver_transform",
+            step=SILVER_LAYER,
             event="Starting Silver layer transformation",
             metrics={"bronze_dir": bronze_dir, "output_path": output_path},
         )
@@ -328,8 +328,6 @@ def run_silver_transform(
 
 def main() -> None:
     try:
-        import argparse
-
         parser = argparse.ArgumentParser(description="Run Silver layer transformation")
         parser.add_argument(
             "--bronze-dir",

@@ -2,6 +2,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+import argparse
 
 from upstream_home_test.constant import GOLD_PATH, SILVER_PATH
 from upstream_home_test.io.parquet_writer import GenericParquetWriter
@@ -98,7 +99,7 @@ def run_gold_reports(
     # Run SQL reports
     result = _run_sql_reports(report_names, silver_dir, **kwargs)
 
-    # Perform side-effects like Silver: cleanup and write parquet inside the run function
+    # Perform cleanup and write parquet
     _perform_gold_side_effects(result)
 
     return result
@@ -175,8 +176,6 @@ def write_reports_to_parquet(result: dict[str, Any], gold_dir: str | None = None
 
 def main() -> None:
     try:
-        import argparse
-
         parser = argparse.ArgumentParser(description="Run Gold layer reports")
         parser.add_argument(
             "--reports",

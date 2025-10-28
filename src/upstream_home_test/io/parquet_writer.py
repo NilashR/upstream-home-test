@@ -433,7 +433,7 @@ def write_parquet(
     """Unified Parquet writer for all layers.
 
     Supports both partitioned directory outputs (Bronze/Silver partitioned) and
-    single-file outputs (typical for non-partitioned Silver/Gold).
+    single-file outputs (typical for non-partitioned Gold).
 
     Args:
         data: List of dictionaries (validated via validator_model) or a Polars DataFrame

@@ -205,7 +205,7 @@ class SQLReportRunner:
 
         log_pipeline_step(
             logger=self.logger,
-            step="sql_report_runner",
+            step=GOLD_LAYER,
             event=f"Running multiple SQL reports: {', '.join(report_names)}",
             metrics={"report_names": report_names, "silver_dir": silver_dir},
         )
@@ -218,7 +218,7 @@ class SQLReportRunner:
             try:
                 log_pipeline_step(
                     logger=self.logger,
-                    step="sql_report_runner",
+                    step=GOLD_LAYER,
                     event=f"Starting SQL report: {report_name}",
                     metrics={"report_name": report_name},
                 )
@@ -305,9 +305,11 @@ class SQLReportRunner:
 
         try:
             # Register DataFrame as 'report_query' table in DuckDB
-            conn.register("report_table", df)
+
 
             # Execute SQL query using DuckDB's native query execution
+            conn.execute('DROP VIEW IF EXISTS report_table')
+            conn.register("report_table", df)
             result = conn.execute(sql_query).pl()
 
             return result

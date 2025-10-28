@@ -3,6 +3,7 @@ in the bronze layer data using DuckDB and regex pattern matching.
 """
 import json
 import sys
+import argparse
 from pathlib import Path
 from typing import Optional
 
@@ -303,8 +304,6 @@ def print_injection_report(report: SQLInjectionReport) -> None:
 
 def main():
     try:
-        import argparse
-
         parser = argparse.ArgumentParser(description="Run SQL injection detection")
         parser.add_argument(
             "--columns",

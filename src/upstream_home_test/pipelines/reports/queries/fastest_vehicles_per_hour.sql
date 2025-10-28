@@ -18,4 +18,4 @@ FROM (
 
         ) as a) as b
 WHERE row_num < 11
-ORDER BY date desc,hour desc
+ORDER BY date desc,hour desc, rank asc
