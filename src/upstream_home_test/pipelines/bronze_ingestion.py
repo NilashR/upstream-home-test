@@ -5,8 +5,10 @@ from pathlib import Path
 from typing import Any, Dict
 
 from upstream_home_test.io.api_client import APIError, fetch_vehicle_messages
-from upstream_home_test.io.parquet_writer import ParquetWriteError, write_bronze_parquet
+from upstream_home_test.io.parquet_writer import ParquetWriteError, write_parquet
+from upstream_home_test.schemas.bronze import VehicleMessageRaw
 from upstream_home_test.utils.logging_config import get_project_root, log_pipeline_step, setup_logging
+from upstream_home_test.utils.timing import elapsed_ms_since
 from src.constant import BRONZE_PATH, BRONZE_LAYER
 
 
@@ -82,10 +84,16 @@ def run_bronze_ingestion(amount: int = 10000, output_dir: str | None = None) -> 
             metrics={"messages": len(messages)}
         )
         
-        write_stats = write_bronze_parquet(messages, output_dir, logger)
+        write_stats = write_parquet(
+            messages,
+            output_dir=output_dir,
+            partitioning_enabled=True,
+            validator_model=VehicleMessageRaw,
+            logger=logger,
+        )
         
         # Calculate total duration
-        total_duration_ms = (time.time() - pipeline_start) * 1000
+        total_duration_ms = elapsed_ms_since(pipeline_start)
         
         # Log completion
         log_pipeline_step(
@@ -109,7 +117,7 @@ def run_bronze_ingestion(amount: int = 10000, output_dir: str | None = None) -> 
         }
         
     except APIError as e:
-        duration_ms = (time.time() - pipeline_start) * 1000
+        duration_ms = elapsed_ms_since(pipeline_start)
         error_msg = f"API error during Bronze ingestion: {str(e)}"
         
         log_pipeline_step(
@@ -123,7 +131,7 @@ def run_bronze_ingestion(amount: int = 10000, output_dir: str | None = None) -> 
         raise
         
     except ParquetWriteError as e:
-        duration_ms = (time.time() - pipeline_start) * 1000
+        duration_ms = elapsed_ms_since(pipeline_start)
         error_msg = f"Parquet write error during Bronze ingestion: {str(e)}"
         
         log_pipeline_step(
@@ -137,7 +145,7 @@ def run_bronze_ingestion(amount: int = 10000, output_dir: str | None = None) -> 
         raise
         
     except Exception as e:
-        duration_ms = (time.time() - pipeline_start) * 1000
+        duration_ms = elapsed_ms_since(pipeline_start)
         error_msg = f"Unexpected error during Bronze ingestion: {str(e)}"
         
         log_pipeline_step(
@@ -152,7 +160,6 @@ def run_bronze_ingestion(amount: int = 10000, output_dir: str | None = None) -> 
 
 
 def main():
-    """CLI entry point for Bronze ingestion."""
     import sys
     
     try:
@@ -160,23 +167,6 @@ def main():
         amount = 10000
         output_dir = BRONZE_PATH
 
-        # Parse command line arguments
-        if len(sys.argv) > 1:
-            try:
-                amount = int(sys.argv[1])
-                print(f"Using amount from command line: {amount}")
-            except ValueError:
-                print(f"Invalid amount argument: {sys.argv[1]}. Using default: {amount}")
-        else:
-            print(f"No amount specified, using default: {amount}")
-            
-        # Parse output directory if provided as second argument
-        if len(sys.argv) > 2:
-            output_dir = sys.argv[2]
-            print(f"Using output directory from command line: {output_dir}")
-        else:
-            print(f"No output directory specified, using default: {output_dir}")
-        
         # Run pipeline
         result = run_bronze_ingestion(amount, output_dir)
         

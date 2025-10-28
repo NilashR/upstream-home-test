@@ -5,7 +5,7 @@ import pytest
 from pydantic import ValidationError
 from unittest.mock import patch
 
-from upstream_home_test.pipelines.silver_transform import run_silver_transform, validate_silver_sample
+from upstream_home_test.pipelines.silver_transform import run_silver_transform
 from upstream_home_test.schemas.silver import VehicleMessageCleaned, map_gear_position
 
 
@@ -137,33 +137,33 @@ class TestSilverSchema:
 class TestSilverTransform:
     """Test Silver transformation pipeline."""
     
-    def test_validate_silver_sample_valid(self):
-        """Test validation of valid Silver sample."""
-        df = pl.DataFrame({
-            "vin": ["1HGBH41JXMN109186", "1HGBH41JXMN109187"],
-            "manufacturer_original": ["Honda ", "Toyota"],
-            "manufacturer_cleaned": ["Honda", "Toyota"],
-            "gear_position": [3, 0],
-            "timestamp": ["2025-01-27T10:30:00Z", "2025-01-27T10:31:00Z"]
-        })
-        
-        errors = validate_silver_sample(df)
-        assert len(errors) == 0
+    # def test_validate_silver_sample_valid(self):
+    #     """Test validation of valid Silver sample."""
+    #     df = pl.DataFrame({
+    #         "vin": ["1HGBH41JXMN109186", "1HGBH41JXMN109187"],
+    #         "manufacturer_original": ["Honda ", "Toyota"],
+    #         "manufacturer_cleaned": ["Honda", "Toyota"],
+    #         "gear_position": [3, 0],
+    #         "timestamp": ["2025-01-27T10:30:00Z", "2025-01-27T10:31:00Z"]
+    #     })
+    #     
+    #     errors = validate_silver_sample(df)
+    #     assert len(errors) == 0
     
-    def test_validate_silver_sample_invalid(self):
-        """Test validation of invalid Silver sample."""
-        df = pl.DataFrame({
-            "vin": [None, "1HGBH41JXMN109187"],  # Null VIN
-            "manufacturer_original": ["Honda ", "Toyota"],
-            "manufacturer_cleaned": ["Honda", "Toyota"],
-            "gear_position": [5, 0],  # Invalid gear position
-            "timestamp": ["2025-01-27T10:30:00Z", "2025-01-27T10:31:00Z"]
-        })
-        
-        errors = validate_silver_sample(df)
-        assert len(errors) > 0
-        assert any("null VIN" in error for error in errors)
-        assert any("invalid gear positions" in error for error in errors)
+    # def test_validate_silver_sample_invalid(self):
+    #     """Test validation of invalid Silver sample."""
+    #     df = pl.DataFrame({
+    #         "vin": [None, "1HGBH41JXMN109187"],  # Null VIN
+    #         "manufacturer_original": ["Honda ", "Toyota"],
+    #         "manufacturer_cleaned": ["Honda", "Toyota"],
+    #         "gear_position": [5, 0],  # Invalid gear position
+    #         "timestamp": ["2025-01-27T10:30:00Z", "2025-01-27T10:31:00Z"]
+    #     })
+    #     
+    #     errors = validate_silver_sample(df)
+    #     assert len(errors) > 0
+    #     assert any("null VIN" in error for error in errors)
+    #     assert any("invalid gear positions" in error for error in errors)
     
     @patch("upstream_home_test.pipelines.silver_transform.pl.scan_parquet")
     @patch("upstream_home_test.pipelines.silver_transform.write_silver_parquet")

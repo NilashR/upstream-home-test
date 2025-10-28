@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 from typing import List
 
-import pandas as pd
+import polars as pl
 import pytest
 from pydantic import ValidationError
 
@@ -121,9 +121,9 @@ class TestSQLInjectionDetection:
         data: List[dict]
     ) -> Path:
         """Create a test parquet file with given data."""
-        df = pd.DataFrame(data)
+        df = pl.DataFrame(data)
         file_path = data_dir / filename
-        df.to_parquet(file_path, index=False)
+        df.write_parquet(file_path)
         return file_path
     
     def test_detect_sql_injection_patterns(self, temp_data_dir: Path) -> None:
@@ -362,9 +362,9 @@ class TestCommonPatterns:
         data: List[dict]
     ) -> Path:
         """Create a test parquet file with given data."""
-        df = pd.DataFrame(data)
+        df = pl.DataFrame(data)
         file_path = data_dir / filename
-        df.to_parquet(file_path, index=False)
+        df.write_parquet(file_path)
         return file_path
 
     def test_common_patterns_available(self) -> None:

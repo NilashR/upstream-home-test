@@ -1,11 +1,10 @@
-"""Gold layer reports pipeline for generating aggregated reports from Silver data using SQL files."""
-
 import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
 from upstream_home_test.pipelines.reports.sql_report_runner import SQLReportRunner
+from upstream_home_test.io.parquet_writer import GenericParquetWriter
 from src.constant import SILVER_PATH, GOLD_PATH
 
 
@@ -38,53 +37,68 @@ def run_gold_reports(
         report_names = runner.list_available_reports()
     
     # Always run multiple reports (simplified approach)
-    return runner.run_multiple_reports(report_names, silver_dir, **kwargs)
+    result = runner.run_multiple_reports(report_names, silver_dir, **kwargs)
+
+    # Perform side-effects like Silver: cleanup and write parquet inside the run function
+    cleanup_old_parquet_files()
+    write_reports_to_parquet(result)
+
+    return result
 
 
-def cleanup_old_csv_files(gold_dir: str = GOLD_PATH) -> None:
-    """Delete existing CSV files in the gold directory.
+def cleanup_old_parquet_files(gold_dir: str = GOLD_PATH) -> None:
+    """Delete existing parquet files in the gold directory.
     
     Args:
-        gold_dir: Directory containing CSV files to clean up
+        gold_dir: Directory containing parquet files to clean up
     """
     gold_path = Path(gold_dir)
     if gold_path.exists():
-        csv_files = list(gold_path.glob("*.csv"))
-        if csv_files:
-            print(f"🧹 Cleaning up {len(csv_files)} existing CSV files...")
-            for csv_file in csv_files:
-                csv_file.unlink()
-                print(f"   🗑️  Deleted: {csv_file.name}")
+        parquet_files = list(gold_path.glob("*.parquet"))
+        if parquet_files:
+            for parquet_file in parquet_files:
+                parquet_file.unlink()
         else:
-            print("🧹 No existing CSV files to clean up")
+            print("🧹 No existing parquet files to clean up")
     else:
         print("🧹 Gold directory doesn't exist yet, no cleanup needed")
 
 
-def write_reports_to_csv(result: Dict[str, Any], gold_dir: str = GOLD_PATH) -> None:
-    """Write report results to CSV files in the gold directory.
+def write_reports_to_parquet(result: Dict[str, Any], gold_dir: str = GOLD_PATH) -> None:
+    """Write report results to parquet files in the gold directory using GenericParquetWriter.
     
     Args:
         result: Dictionary containing report results from run_gold_reports
-        gold_dir: Directory to write CSV files to
+        gold_dir: Directory to write parquet files to
     """
-    gold_path = Path(gold_dir)
-    gold_path.mkdir(parents=True, exist_ok=True)
-    
     # Generate timestamp for file naming
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     
     for report_name, report_result in result['results'].items():
         if report_result['status'] == 'completed' and 'result_data' in report_result:
-            # Create CSV filename with timestamp
-            csv_filename = f"{report_name}_{timestamp}.csv"
-            csv_path = gold_path / csv_filename
+            # Create parquet filename with timestamp
+            parquet_filename = f"{report_name}_{timestamp}.parquet"
+            parquet_path = Path(gold_dir) / parquet_filename
             
-            # Write DataFrame to CSV
-            report_result['result_data'].to_csv(csv_path, index=False)
-            print(f"   📁 CSV saved: {csv_path}")
+            # Use GenericParquetWriter with partitioning disabled for gold layer
+            writer = GenericParquetWriter(
+                output_dir=str(parquet_path.parent),
+                partitioning_enabled=False,
+                max_file_size_mb=1000.0,  # Large files OK for gold layer
+                compression="zstd"
+            )
+            
+            # Write the DataFrame
+            write_result = writer.write(report_result['result_data'])
+            
+            # Rename the output file to the desired name
+            default_file = parquet_path.parent / "data.parquet"
+            if default_file.exists():
+                default_file.rename(parquet_path)
+            
+            print(f"   📁 Parquet saved: {parquet_path} ({write_result['rows']} rows)")
         else:
-            print(f"   ⚠️  No CSV written for {report_name} (status: {report_result['status']})")
+            print(f"   ⚠️  No parquet written for {report_name} (status: {report_result['status']})")
 
 
 def main():
@@ -94,62 +108,8 @@ def main():
         silver_dir = SILVER_PATH
         report_names = ['fastest_vehicles_per_hour', 'vin_last_state']  # Default reports
         
-        if len(sys.argv) > 1:
-            first_arg = sys.argv[1]
-            
-            # Handle special cases
-            if first_arg == "list":
-                runner = SQLReportRunner()
-                runner.print_available_reports()
-                return
-            elif first_arg == "all":
-                report_names = None  # Will run all reports
-            else:
-                # Parse report names
-                report_names = [arg for arg in sys.argv[1:] if not arg.startswith("--")]
-                
-                # Parse additional arguments
-                for i, arg in enumerate(sys.argv[1:], 1):
-                    if arg == "--silver-dir" and i + 1 < len(sys.argv):
-                        silver_dir = sys.argv[i + 1]
-                    elif arg.startswith("--silver-dir="):
-                        silver_dir = arg.split("=", 1)[1]
-        
         # Run reports
         result = run_gold_reports(report_names, silver_dir)
-        
-        # Print results summary
-        print(f"\nGold reports generation completed!")
-        print(f"Total reports: {result['total_reports']}")
-        print(f"Successful: {len(result['successful_reports'])}")
-        print(f"Failed: {len(result['failed_reports'])}")
-        print(f"Total duration: {result['total_duration_ms']:.2f}ms")
-        
-        # Print detailed results for each report
-        for report_name, report_result in result['results'].items():
-            if report_result['status'] == 'completed':
-                print(f"\n📊 {report_name.upper().replace('_', ' ')}")
-                print(f"   Input rows: {report_result['input_rows']}")
-                print(f"   Output rows: {report_result['output_rows']}")
-                print(f"   SQL file: {report_result['sql_file']}")
-                
-                # Print first few rows of result data
-                if 'result_data' in report_result and not report_result['result_data'].empty:
-                    print(f"   Sample data:")
-                    print(report_result['result_data'].head().to_string(index=False))
-            else:
-                print(f"\n❌ {report_name.upper().replace('_', ' ')} - FAILED")
-                print(f"   Error: {report_result['error']}")
-        
-        if result['failed_reports']:
-            print(f"\nFailed reports: {', '.join(result['failed_reports'])}")
-        
-        # Clean up old CSV files and write new ones
-        print(f"\n🧹 Cleaning up old CSV files...")
-        cleanup_old_csv_files()
-        
-        print(f"\n💾 Writing reports to CSV files...")
-        write_reports_to_csv(result)
         
     except Exception as e:
         print(f"Gold reports generation failed: {str(e)}")

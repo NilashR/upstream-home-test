@@ -13,7 +13,7 @@ FROM (
                    EXTRACT(DAY FROM timestamp) as date,
                    EXTRACT(HOUR FROM timestamp) as hour,
                    max(velocity) as max_velocity_per_vin
-            FROM aaa
+            FROM report_table
             GROUP BY vin, EXTRACT(DAY FROM timestamp), EXTRACT(HOUR FROM timestamp)
 
         ) as a) as b

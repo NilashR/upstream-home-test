@@ -4,11 +4,11 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List
 
-import pandas as pd
 import polars as pl
 import duckdb
 
 from upstream_home_test.utils.logging_config import log_pipeline_step, setup_logging
+from upstream_home_test.utils.timing import elapsed_ms_since
 
 
 class SQLReportRunner:
@@ -85,23 +85,25 @@ class SQLReportRunner:
             )
             raise FileNotFoundError(error_msg)
         
-        # Convert to pandas for DuckDB compatibility
-        df_pandas = df.to_pandas()
+        # Use polars DataFrame directly with DuckDB
+        df_polars = df
         
         # Execute SQL query using DuckDB
         log_pipeline_step(
             logger=self.logger,
             step="sql_report_runner",
             event=f"Executing SQL query for {report_name} report",
-            metrics={"sql_file": str(sql_file), "input_rows": len(df_pandas)}
+            metrics={"sql_file": str(sql_file), "input_rows": len(df_polars)}
         )
         
-        result = self._execute_sql_with_duckdb(df_pandas, sql_query)
+        result = self._execute_sql_with_duckdb(df_polars, sql_query)
         
         # Convert timestamp columns back to proper datetime if they exist
         for col in result.columns:
-            if 'timestamp' in col.lower() and result[col].dtype == 'object':
-                result[col] = pd.to_datetime(result[col], utc=True)
+            if 'timestamp' in col.lower() and result[col].dtype == pl.Utf8:
+                result = result.with_columns(
+                    pl.col(col).str.to_datetime().dt.replace_time_zone("UTC")
+                )
         
         log_pipeline_step(
             logger=self.logger,
@@ -114,7 +116,7 @@ class SQLReportRunner:
             "status": "completed",
             "report_name": report_name,
             "sql_file": str(sql_file),
-            "input_rows": len(df_pandas),
+            "input_rows": len(df_polars),
             "output_rows": len(result),
             "result_data": result
         }
@@ -190,7 +192,7 @@ class SQLReportRunner:
                 failed_reports.append(report_name)
         
         # Calculate total duration
-        total_duration_ms = (time.time() - runner_start) * 1000
+        total_duration_ms = elapsed_ms_since(runner_start)
         
         # Log completion
         log_pipeline_step(
@@ -227,11 +229,11 @@ class SQLReportRunner:
         all_reports = self.list_available_reports()
         return self.run_multiple_reports(all_reports, silver_dir, **kwargs)
     
-    def _execute_sql_with_duckdb(self, df: pd.DataFrame, sql_query: str) -> pd.DataFrame:
-        """Execute SQL query using DuckDB with pandas DataFrame.
+    def _execute_sql_with_duckdb(self, df: pl.DataFrame, sql_query: str) -> pl.DataFrame:
+        """Execute SQL query using DuckDB with polars DataFrame.
         
         Args:
-            df: Input pandas DataFrame to be used as 'aaa' table
+            df: Input polars DataFrame to be used as 'report_table' table
             sql_query: SQL query string from .sql file
             
         Returns:
@@ -241,11 +243,11 @@ class SQLReportRunner:
         conn = duckdb.connect()
         
         try:
-            # Register DataFrame as 'aaa' table in DuckDB
-            conn.register('aaa', df)
+            # Register DataFrame as 'report_table' table in DuckDB
+            conn.register('report_table', df)
             
             # Execute SQL query using DuckDB's native query execution
-            result = conn.execute(sql_query).df()
+            result = conn.execute(sql_query).pl()
             
             return result
             

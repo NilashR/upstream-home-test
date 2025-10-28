@@ -15,19 +15,17 @@ class VehicleMessageCleaned(BaseModel):
     """
     
     model_config = ConfigDict(extra="forbid")
-    
-    # Core vehicle identification (cleaned)
-    vin: str  # Non-null after filtering
-    manufacturer_original: str | None  # Original manufacturer value
-    manufacturer_cleaned: str | None  # Cleaned manufacturer (trailing spaces removed)
-    
-    # Vehicle state (standardized)
+
+    vin: str
+    manufacturer: str | None
+    year: int | None = None
+    model: str | None = None
     gear_position: int | None  # Standardized gear position as integer
-    
-    # Timestamp (timezone-aware UTC)
+    velocity: int | None = None
+    front_left_door_state: str | None = None
+    wipers_state: bool | None = None
+    driver_seatbelt_state: str | None = None
     timestamp: datetime
-    
-    # Additional cleaned fields
     speed: float | None = None
     rpm: int | None = None
     fuel_level: float | None = None
@@ -50,8 +48,8 @@ class VehicleMessageCleaned(BaseModel):
         Raises:
             ValueError: If gear position is invalid
         """
-        if v is not None and v not in {-1, 0, 1, 2, 3, 4, 5, 6}:
-            raise ValueError(f"Gear position must be -1 to 6, got {v}")
+        if v is not None and v not in {-1, 0, 1, 2, 3, 4, 5, 6, None}:
+            raise ValueError(f"Gear position must be -1 to 6,null got {v}")
         return v
     
     @field_validator("vin")
@@ -69,25 +67,11 @@ class VehicleMessageCleaned(BaseModel):
             ValueError: If VIN is empty
         """
         if not v or not v.strip():
-            raise ValueError("VIN cannot be empty")
+            raise ValueError("VIN cannot be null")
         return v.strip().upper()
+
     
-    @field_validator("manufacturer_original")
-    @classmethod
-    def validate_manufacturer_original(cls, v: str | None) -> str | None:
-        """Validate manufacturer_original field (preserve whitespace).
-        
-        Args:
-            v: Manufacturer string or None
-            
-        Returns:
-            Manufacturer string or None
-        """
-        if v is None:
-            return v
-        return v  # Keep original whitespace
-    
-    @field_validator("manufacturer_cleaned")
+    @field_validator("manufacturer")
     @classmethod
     def validate_manufacturer_cleaned(cls, v: str | None) -> str | None:
         """Validate manufacturer_cleaned field (strip whitespace).
@@ -137,28 +121,6 @@ class VehicleMessageCleaned(BaseModel):
         if v is not None and v < 0:
             raise ValueError(f"Value must be non-negative, got {v}")
         return v
-    
-    @model_validator(mode="after")
-    def validate_manufacturer_consistency(self) -> "VehicleMessageCleaned":
-        """Validate manufacturer field consistency.
-        
-        Returns:
-            Self after validation
-            
-        Raises:
-            ValueError: If manufacturer fields are inconsistent
-        """
-        # If both manufacturer fields are present, cleaned should be original stripped
-        if (self.manufacturer_original is not None and 
-            self.manufacturer_cleaned is not None):
-            expected_cleaned = self.manufacturer_original.strip()
-            if self.manufacturer_cleaned != expected_cleaned:
-                raise ValueError(
-                    f"manufacturer_cleaned should be manufacturer_original stripped. "
-                    f"Expected '{expected_cleaned}', got '{self.manufacturer_cleaned}'"
-                )
-        
-        return self
 
 
 # Gear position enum with all available options

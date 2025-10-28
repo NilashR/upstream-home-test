@@ -2,13 +2,16 @@
 
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Type
 
 import polars as pl
 from pydantic import ValidationError
 
+from pydantic import BaseModel
 from upstream_home_test.schemas.bronze import VehicleMessageRaw
 from upstream_home_test.utils.logging_config import log_pipeline_step
+from upstream_home_test.utils.timing import elapsed_ms_since
+from src.constant import BRONZE_PATH
 from upstream_home_test.utils.partitioning import create_partition_filename, create_partition_path
 
 
@@ -27,7 +30,8 @@ class GenericParquetWriter:
         compression: str = "zstd",
         partitioning_enabled: bool = True,
         partition_columns: Optional[List[str]] = None,
-        logger: Optional[Any] = None
+        logger: Optional[Any] = None,
+        validator_model: Optional[Type[BaseModel]] = None,
     ):
         """Initialize the Generic Parquet writer.
         
@@ -38,6 +42,7 @@ class GenericParquetWriter:
             partitioning_enabled: Whether to enable partitioning by date/hour
             partition_columns: Custom partition columns (overrides date/hour partitioning)
             logger: Logger instance for structured logging
+            validator_model: Optional Pydantic model used to validate list[dict] inputs
         """
         self.output_dir = output_dir
         self.max_file_size_mb = max_file_size_mb
@@ -45,30 +50,34 @@ class GenericParquetWriter:
         self.partitioning_enabled = partitioning_enabled
         self.partition_columns = partition_columns or ["date", "hour"]
         self.logger = logger
+        self.validator_model = validator_model
         
         # Statistics tracking
         self.files_written = 0
         self.total_rows = 0
         self.partitions_created = 0
 
-    def validate_messages(self, messages: List[Dict[str, Any]]) -> List[VehicleMessageRaw]:
-        """Validate messages against Bronze schema.
+    def validate_messages(self, messages: List[Dict[str, Any]]) -> List[BaseModel]:
+        """Validate messages against provided schema model.
         
         Args:
             messages: List of raw message dictionaries
             
         Returns:
-            List of validated VehicleMessageRaw objects
+            List of validated model objects
             
         Raises:
             ParquetWriteError: If validation fails
         """
+        if self.validator_model is None:
+            raise ParquetWriteError("validator_model must be provided when writing list[dict] inputs")
+
         validated_messages = []
         validation_errors = []
         
         for i, message in enumerate(messages):
             try:
-                validated_msg = VehicleMessageRaw.model_validate(message)
+                validated_msg = self.validator_model.model_validate(message)
                 validated_messages.append(validated_msg)
             except ValidationError as e:
                 validation_errors.append(f"Message {i}: {e}")
@@ -147,7 +156,7 @@ class GenericParquetWriter:
                 self._write_single_file(df)
                 unique_partitions = 1
             
-            duration_ms = (time.time() - start_time) * 1000
+            duration_ms = elapsed_ms_since(start_time)
             
             # Log summary
             log_pipeline_step(
@@ -172,7 +181,7 @@ class GenericParquetWriter:
             }
             
         except Exception as e:
-            duration_ms = (time.time() - start_time) * 1000
+            duration_ms = elapsed_ms_since(start_time)
             error_msg = f"Failed to write Parquet files: {str(e)}"
             
             log_pipeline_step(
@@ -337,77 +346,75 @@ class GenericParquetWriter:
                 )
 
 
-def write_bronze_parquet(
-    messages: List[Dict[str, Any]], 
-    output_dir: str = "data/bronze",
-    logger = None
+
+def write_parquet(
+    data: List[Dict[str, Any]] | pl.DataFrame,
+    *,
+    output_dir: Optional[str] = None,
+    output_path: Optional[str] = None,
+    partitioning_enabled: Optional[bool] = None,
+    partition_columns: Optional[List[str]] = None,
+    validator_model: Optional[Type[BaseModel]] = None,
+    logger: Optional[Any] = None,
 ) -> Dict[str, Any]:
-    """Write messages to Bronze layer Parquet files with partitioning.
+    """Unified Parquet writer for all layers.
     
-    This is a convenience function that creates a GenericParquetWriter instance
-    configured for Bronze layer with partitioning enabled.
-    
+    Supports both partitioned directory outputs (Bronze/Silver partitioned) and
+    single-file outputs (typical for non-partitioned Silver/Gold).
+
     Args:
-        messages: List of message dictionaries
-        output_dir: Base output directory for Bronze layer
+        data: List of dictionaries (validated via validator_model) or a Polars DataFrame
+        output_dir: Base output directory for partitioned writes
+        output_path: Full file path for single-file writes
+        partitioning_enabled: Whether to enable partitioning; inferred if not provided
+        partition_columns: Custom partition columns when partitioning is enabled
+        validator_model: Pydantic model for validating list[dict] inputs
         logger: Logger instance for structured logging
-        
+
     Returns:
-        Dictionary with write statistics
-        
+        Write statistics dictionary.
+
     Raises:
-        ParquetWriteError: If writing fails
+        ParquetWriteError: If validation or write fails, or when configuration is invalid
     """
+    # Determine mode
+    if output_dir is None and output_path is None:
+        raise ParquetWriteError("Either output_dir (partitioned) or output_path (single file) must be provided")
+
+    if output_path is not None and output_dir is not None:
+        raise ParquetWriteError("Provide only one of output_dir or output_path, not both")
+
+    if output_path is not None:
+        # Single-file mode
+        output_path_obj = Path(output_path)
+        resolved_output_dir = str(output_path_obj.parent)
+        filename = output_path_obj.name
+
+        writer = GenericParquetWriter(
+            output_dir=resolved_output_dir,
+            partitioning_enabled=False if partitioning_enabled is None else partitioning_enabled,
+            partition_columns=partition_columns,
+            logger=logger,
+            validator_model=validator_model,
+        )
+
+        result = writer.write(data)
+
+        # Rename if a specific filename was requested
+        if filename != "data.parquet":
+            current_file = Path(resolved_output_dir) / "data.parquet"
+            target_file = Path(resolved_output_dir) / filename
+            if current_file.exists():
+                current_file.rename(target_file)
+        return result
+
+    # Partitioned directory mode
     writer = GenericParquetWriter(
-        output_dir=output_dir,
-        partitioning_enabled=True,
-        logger=logger
+        output_dir=output_dir,  # type: ignore[arg-type]
+        partitioning_enabled=True if partitioning_enabled is None else partitioning_enabled,
+        partition_columns=partition_columns,
+        logger=logger,
+        validator_model=validator_model,
     )
-    return writer.write(messages)
-
-
-def write_silver_parquet(
-    df: pl.DataFrame,
-    output_path: str = "data/silver/vehicle_messages_cleaned.parquet",
-    logger = None
-) -> Dict[str, Any]:
-    """Write cleaned DataFrame to Silver layer Parquet file.
-    
-    This is a convenience function that creates a GenericParquetWriter instance
-    configured for Silver layer without partitioning.
-    
-    Args:
-        df: Polars DataFrame with cleaned data
-        output_path: Output file path
-        logger: Logger instance for structured logging
-        
-    Returns:
-        Dictionary with write statistics
-        
-    Raises:
-        ParquetWriteError: If writing fails
-    """
-    # Extract directory and filename from output_path
-    output_path_obj = Path(output_path)
-    output_dir = str(output_path_obj.parent)
-    filename = output_path_obj.name
-    
-    writer = GenericParquetWriter(
-        output_dir=output_dir,
-        partitioning_enabled=False,
-        logger=logger
-    )
-    
-    # Write the DataFrame
-    result = writer.write(df)
-    
-    # Rename the output file if it's not already named correctly
-    if filename != "data.parquet":
-        current_file = Path(output_dir) / "data.parquet"
-        target_file = Path(output_dir) / filename
-        if current_file.exists():
-            current_file.rename(target_file)
-    
-    return result
-
+    return writer.write(data)
 

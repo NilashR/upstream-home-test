@@ -7,6 +7,7 @@ import httpx
 from httpx import HTTPError, TimeoutException
 
 from upstream_home_test.utils.logging_config import log_pipeline_step
+from upstream_home_test.utils.timing import elapsed_ms_since
 
 
 class APIError(Exception):
@@ -52,7 +53,7 @@ class APIClient:
                     response = client.get(url, params=params)
                     response.raise_for_status()
                 
-                duration_ms = (time.time() - start_time) * 1000
+                duration_ms = elapsed_ms_since(start_time)
                 
                 # Parse JSON response
                 data = response.json()

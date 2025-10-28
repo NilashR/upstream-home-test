@@ -1,5 +1,4 @@
 """Silver layer transformation pipeline."""
-
 import time
 from pathlib import Path
 from typing import Any, Dict
@@ -7,8 +6,9 @@ from typing import Any, Dict
 import polars as pl
 
 from upstream_home_test.io.parquet_writer import GenericParquetWriter, ParquetWriteError
-from upstream_home_test.schemas.silver import GEAR_POSITION_MAPPING, map_gear_position
+from upstream_home_test.schemas.silver import map_gear_position
 from upstream_home_test.utils.logging_config import log_pipeline_step, setup_logging
+from upstream_home_test.utils.timing import elapsed_ms_since
 from src.constant import BRONZE_PATH, SILVER_PATH, SILVER_LAYER
 
 
@@ -49,6 +49,23 @@ def run_silver_transform(
             metrics={"bronze_dir": bronze_dir, "output_path": output_path}
         )
         
+        # Ensure there are parquet files before scanning
+        if not any(Path(bronze_dir).rglob("*.parquet")):
+            log_pipeline_step(
+                logger=logger,
+                step="silver_transform",
+                event="No Bronze parquet files found",
+                metrics={"bronze_dir": bronze_dir},
+                level="WARNING",
+            )
+            return {
+                "status": "completed",
+                "input_rows": 0,
+                "output_rows": 0,
+                "filtered_rows": 0,
+                "duration_ms": 0,
+            }
+
         # Scan all Bronze Parquet files
         bronze_pattern = f"{bronze_dir}/**/*.parquet"
         df = pl.scan_parquet(bronze_pattern).collect()
@@ -96,27 +113,36 @@ def run_silver_transform(
             metrics={"filtered_rows": filtered_rows, "remaining_rows": len(df_filtered)}
         )
         
-        # Apply transformations
+        # Create derived columns and drop specified raw columns
+        df_filtered = df_filtered.with_columns([
+            # Map gear positions to integers before dropping the raw column
+            pl.col("gearPosition").map_elements(
+                map_gear_position,
+                return_dtype=pl.Int64,
+            ).alias("gear_position"),
+        ])
+
+                # Apply remaining transformations
         df_cleaned = df_filtered.with_columns([
+            pl.col("frontLeftDoorState").alias("front_left_door_state"),
+            pl.col("wipersState").alias("wipers_state"),
+            pl.col("driverSeatbeltState").alias("driver_seatbelt_state"),
             # Clean manufacturer field in place (remove trailing spaces)
             pl.col("manufacturer").str.strip_chars().alias("manufacturer"),
-            
-            # Map gear positions to integers
-            pl.col("gearPosition").map_elements(
-                map_gear_position, 
-                return_dtype=pl.Int64
-            ).alias("gearPosition"),
-            
             # Ensure timestamp is in UTC timezone
             pl.col("timestamp").dt.replace_time_zone("UTC").alias("timestamp"),
         ])
+
+        # Drop unused columns from df_filtered
+        df_cleaned_filtered = df_cleaned.drop(["gearPosition", "frontLeftDoorState", "driverSeatbeltState", "wipersState"])
+
         
         # Step 3: Write to Silver layer
         log_pipeline_step(
             logger=logger,
             step=SILVER_LAYER,
             event="Writing cleaned data to Silver layer",
-            metrics={"output_rows": len(df_cleaned)}
+            metrics={"output_rows": len(df_cleaned_filtered)}
         )
         
         # Create generic parquet writer for Silver layer with partitioning (same as Bronze)
@@ -127,10 +153,10 @@ def run_silver_transform(
             logger=logger
         )
         
-        write_stats = writer.write(df_cleaned)
+        write_stats = writer.write(df_cleaned_filtered)
         
         # Calculate total duration
-        total_duration_ms = (time.time() - pipeline_start) * 1000
+        total_duration_ms = elapsed_ms_since(pipeline_start)
         
         # Log completion
         log_pipeline_step(
@@ -140,7 +166,7 @@ def run_silver_transform(
             metrics={
                 "input_rows": input_rows,
                 "filtered_rows": filtered_rows,
-                "output_rows": len(df_cleaned),
+                "output_rows": len(df_cleaned_filtered),
                 "total_duration_ms": round(total_duration_ms, 2)
             }
         )
@@ -149,12 +175,12 @@ def run_silver_transform(
             "status": "completed",
             "input_rows": input_rows,
             "filtered_rows": filtered_rows,
-            "output_rows": len(df_cleaned),
+            "output_rows": len(df_cleaned_filtered),
             "duration_ms": round(total_duration_ms, 2)
         }
         
     except ParquetWriteError as e:
-        duration_ms = (time.time() - pipeline_start) * 1000
+        duration_ms = elapsed_ms_since(pipeline_start)
         error_msg = f"Parquet write error during Silver transformation: {str(e)}"
         
         log_pipeline_step(
@@ -168,7 +194,7 @@ def run_silver_transform(
         raise
         
     except Exception as e:
-        duration_ms = (time.time() - pipeline_start) * 1000
+        duration_ms = elapsed_ms_since(pipeline_start)
         error_msg = f"Unexpected error during Silver transformation: {str(e)}"
         
         log_pipeline_step(
@@ -190,13 +216,6 @@ def main():
         # Parse command line arguments
         bronze_dir = BRONZE_PATH
         output_path = SILVER_PATH
-        
-        if len(sys.argv) > 1:
-            bronze_dir = sys.argv[1]
-            print(f"Using bronze directory: {bronze_dir}")
-        if len(sys.argv) > 2:
-            output_path = sys.argv[2]
-            print(f"Using output path: {output_path}")
         
         # Run pipeline
         result = run_silver_transform(bronze_dir, output_path)

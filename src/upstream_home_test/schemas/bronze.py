@@ -20,21 +20,12 @@ class VehicleMessageRaw(BaseModel):
     manufacturer: str | None
     year: int | None = None
     model: str | None = None
-    
-    # Vehicle state
-    gearPosition: str | None = None  # Raw gear position as string
-    velocity: int | None = None  # Speed in km/h
-    
-    # Vehicle systems
+    gearPosition: str | None = None
+    velocity: int | None = None
     frontLeftDoorState: str | None = None
     wipersState: bool | None = None
     driverSeatbeltState: str | None = None
-    
-    # Timestamp
     timestamp: datetime
-    
-    # Additional fields that might be present in API response
-    # These are optional to handle varying API response structures
     speed: float | None = None
     rpm: int | None = None
     fuel_level: float | None = None
