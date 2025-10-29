@@ -47,6 +47,15 @@ A high-performance data pipeline implementing the medallion architecture (Bronze
    poetry run python -m upstream_home_test.scripts.run_pipeline
    ```
 
+4. **Explore example data** (optional):
+   ```bash
+   # View the data_example folder to see expected output structure
+   ls -la data_example/
+   
+   # Or examine specific example files
+   poetry run python -c "import polars as pl; print(pl.read_parquet('data_example/bronze/date=2025-10-29/hour=03/data.parquet').head())"
+   ```
+
 ## 📊 Data Pipeline Usage
 
 ### 🥉 Bronze Layer (Raw Data Ingestion)
@@ -163,6 +172,7 @@ poetry run python -m upstream_home_test.utils.sql_injection_detector --data-path
 
 ## 📁 Output Structure
 
+### Main Data Directory (`data/`)
 ```
 data/
 ├── bronze/                    # Raw vehicle messages
@@ -183,6 +193,14 @@ data/
 └── sql_injection_report/      # Security monitoring
     └── sql_injection_report.parquet
 ```
+
+### Example Data Directory (`data_example/`)
+The `data_example/` folder contains sample data that demonstrates the expected output structure and can be used for:
+- **Understanding data formats** and schema structure
+- **Validating report outputs** and data transformations
+- **Documentation purposes** to show expected file organization
+
+The example data follows the same structure as the main `data/` directory with sample Bronze, Silver, Gold, and SQL injection report files.
 
 ## 🔧 Development
 
